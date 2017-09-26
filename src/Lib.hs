@@ -9,7 +9,7 @@ import Network.Wai.Handler.Warp (run)
 import qualified Network.HTTP.Types as HTTP
 import Network.HTTP.Types.Header (hContentType)
 
-someFunc :: IO ()
+someFunc :: Int -> IO ()
 someFunc port = run port $ \req f ->
   do
     putStrLn . show $ Wai.requestHeaders req

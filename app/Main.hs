@@ -5,4 +5,4 @@ import System.Environment (getEnv)
 import Lib
 
 main :: IO ()
-main = getEnv "PORT" >>= read . someFunc
+main = getEnv "PORT" >>= someFunc . read
