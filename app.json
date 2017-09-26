@@ -1,0 +1,16 @@
+{
+  "name": "Warp test",
+  "description": "A test of the Warp HTTP server for Haskell",
+  "repository": "",
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "free"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "https://github.com/mfine/heroku-buildpack-stack"
+    }
+  ]
+}
