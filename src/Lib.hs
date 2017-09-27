@@ -12,7 +12,5 @@ import Network.HTTP.Types.Header (hContentType)
 
 someFunc :: Int -> IO ()
 someFunc port = run port $ \req f ->
-  do
-    putStrLn . show $ Wai.requestHeaders req
     f $ Wai.responseLBS HTTP.status200 [(hContentType, "text/plain")] $
-        fromString . show $ Wai.isSecure req
+        fromString . show $ Wai.requestHeaders req
