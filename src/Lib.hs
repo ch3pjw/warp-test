@@ -6,13 +6,13 @@ module Lib
 
 import Control.Applicative ((<|>))
 import Data.ByteString as BS
+import Data.ByteString.Lazy as LBS
 import Data.ByteString.Lazy.UTF8 (fromString)
 import Data.Monoid ((<>))
 import qualified Network.HTTP.Types as HTTP
 import Network.HTTP.Types.Header (RequestHeaders, hContentType, hLocation)
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp (run)
-import Network.Wai.UrlMap (mapUrls, mount, mountRoot)
 
 -- Secure-only redirect middleware:
 hasHttpsHeader :: RequestHeaders -> Bool
@@ -60,13 +60,95 @@ defaultApp req sendResponse =
       (fromString . show $ Wai.requestHeaders req)
 
 
--- Main application
+data Endpoint = Endpoint
+  { epGet :: Wai.Application
+  , epHead :: Wai.Application
+  , epPost :: Wai.Application
+  , epPut :: Wai.Application
+  , epDelete :: Wai.Application
+  , epOptions :: Wai.Application
+  , epPatch :: Wai.Application
+  , epGetChild :: Maybe (Text -> Endpoint)
+  }
+
+methodNotAllowed :: Wai.Application
+methodNotAllowed = textResponse' HTTP.status405 "not allowed"
+
+notFound :: Wai.Application
+notFound = textResponse' HTTP.status404 "not found"
+
+_endpoint :: Wai.Application -> Endpoint
+_endpoint a = Endpoint
+  { epGet = a
+  , epHead = a
+  , epPost = a
+  , epPut = a
+  , epDelete = a
+  , epOptions = a
+  , epPatch = a
+  , epGetChild = Nothing}
+
+endpoint :: Endpoint
+endpoint = _endpoint methodNotAllowed
+
+notFoundEp :: Endpoint
+notFoundEp = _endpoint notFound
+
+endpoints :: [(Text, Endpoint)] -> Text -> Endpoint
+endpoints eps t = maybe notFoundEp id $ lookup t eps
+
+
+dispatchEndpoint :: Endpoint -> Wai.Application
+dispatchEndpoint ep req = handler (Wai.pathInfo req) ep req
+  where
+    method = Wai.requestMethod req
+    handler [] ep = getEpApp ep
+    handler (name:names) ep =
+      maybe notFound (\f -> (handler names $ f name)) (epGetChild ep)
+    getEpApp ep
+      | method == HTTP.methodGet = epGet ep
+      | method == HTTP.methodPost = epPost ep
+      | method == HTTP.methodDelete = epDelete ep
+      | method == HTTP.methodPut = epPut ep
+      | method == HTTP.methodHead = epHead ep
+      | method == HTTP.methodOptions = epOptions ep
+      | method == HTTP.methodPatch = epPatch ep
+      | otherwise = methodNotAllowed
+
+
+textResponse' :: HTTP.Status -> LBS.ByteString -> Wai.Application
+textResponse' status text req sendResponse = sendResponse $
+    Wai.responseLBS status [(hContentType, "text/plain")] text
+
+textResponse = textResponse' HTTP.status200
+
+authMiddleware = id
+interestedCollectionGet = textResponse "interested collection get"
+interestedCollectionPost = textResponse "interested collection post"
+interestedResource name =
+   textResponse $ "interested resource get: "
+
+
+root :: Endpoint
+root = endpoint
+    { epGet = defaultApp
+    , epGetChild = Just $ endpoints
+        [ ("david", endpoint {epGet = githubRedir "foolswood"})
+        , ("paul", endpoint {epGet = githubRedir "ch3pjw"})
+        , ("interested", endpoint
+            { epGet = authMiddleware $ interestedCollectionGet
+            , epPost = interestedCollectionPost
+            , epGetChild = Just $
+                \name -> endpoint { epGet = interestedResource name }
+            }
+          )
+        ]
+    }
+
+-- main application
 
 app :: Wai.Application
-app = mapUrls $
-    mount "david" (githubRedir "foolswood")
-    <|> mount "paul" (githubRedir "ch3pjw")
-    <|> mountRoot defaultApp
+app = dispatchEndpoint root
 
 someFunc :: Int -> IO ()
 someFunc port = run port $ forceTls app
