@@ -5,8 +5,8 @@ module Lib
     ) where
 
 import Control.Applicative
-import Data.ByteString as BS
-import Data.ByteString.Lazy as LBS
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import Data.ByteString.Lazy.UTF8 (fromString)
 import Data.Monoid ((<>))
 import qualified Network.HTTP.Types as HTTP
@@ -37,6 +37,26 @@ forceTls app req sendResponse =
       mempty
     location host =
       "https://" <> host <> Wai.rawPathInfo req <> Wai.rawQueryString req
+
+
+-- Error prettifying middleware:
+replaceHeaders ::
+  (HTTP.HeaderName, BS.ByteString) -> [HTTP.Header] -> [HTTP.Header]
+replaceHeaders h@(hName, hValue) = (h:) . filter (\(n, v) -> n /= hName)
+
+prettifyError :: Wai.Middleware
+prettifyError app req sendResponse = app req mySendResponse
+  where
+    mySendResponse :: Wai.Response -> IO Wai.ResponseReceived
+    mySendResponse response =
+      let status = Wai.responseStatus response in
+      if HTTP.statusIsSuccessful status
+      then sendResponse response
+      else sendResponse $ Wai.responseLBS
+        status
+        (replaceHeaders (hContentType, "text/plain") $
+         Wai.responseHeaders response)
+        (LBS.fromStrict $ HTTP.statusMessage status)
 
 
 -- Redirect sub-application
@@ -130,11 +150,15 @@ instance Alternative Endpoint' where
 
 type Endpoint = Endpoint' Wai.Application
 
+
+emptyResponse :: HTTP.Status -> Wai.Response
+emptyResponse s = Wai.responseBuilder s [] mempty
+
 methodNotAllowed :: Wai.Application
-methodNotAllowed = textResponse' HTTP.status405 "not allowed"
+methodNotAllowed req sendResponse = sendResponse $ emptyResponse HTTP.status405
 
 notFound :: Wai.Application
-notFound = textResponse' HTTP.status404 "not found"
+notFound req sendResponse = sendResponse $ emptyResponse HTTP.status404
 
 endpoint :: Endpoint
 endpoint = pure methodNotAllowed
@@ -231,4 +255,4 @@ app :: Wai.Application
 app = dispatchEndpoint root
 
 someFunc :: Int -> IO ()
-someFunc port = run port $ forceTls app
+someFunc port = run port $ forceTls $ prettifyError app
