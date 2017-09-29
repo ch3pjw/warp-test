@@ -12,6 +12,7 @@ import qualified Network.HTTP.Types as HTTP
 import Network.HTTP.Types.Header (RequestHeaders, hContentType, hLocation)
 import qualified Network.Wai as Wai
 import Network.Wai.Handler.Warp (run)
+import Network.Wai.Middleware.HttpAuth (basicAuth)
 
 -- Secure-only redirect middleware:
 hasHttpsHeader :: RequestHeaders -> Bool
@@ -227,7 +228,13 @@ textResponse' status text req sendResponse = sendResponse $
 
 textResponse = textResponse' HTTP.status200
 
-authMiddleware = id
+isPaul :: BS.ByteString -> BS.ByteString -> IO Bool
+isPaul "paul" "paul" = pure True
+isPaul _ _ = pure False
+
+authMiddleware :: Wai.Middleware
+authMiddleware = basicAuth isPaul "Concert API"
+
 interestedCollectionGet = textResponse "interested collection get"
 interestedCollectionPost = textResponse "interested collection post"
 interestedResource :: Text -> Wai.Application
