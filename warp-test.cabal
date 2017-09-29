@@ -21,6 +21,7 @@ library
                        , http-types
                        , neat-interpolation
                        , text
+                       , urlencoded
                        , utf8-string
                        , wai
                        , wai-extra

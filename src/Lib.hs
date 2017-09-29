@@ -7,10 +7,11 @@ import NeatInterpolation (text)
 import Control.Applicative
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import Data.ByteString.Lazy.UTF8 (fromString)
+import Data.ByteString.Lazy.UTF8 as UTF8
 import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
+import qualified Data.URLEncoded as UrlE
 import qualified Network.HTTP.Types as HTTP
 import Network.HTTP.Types.Header (RequestHeaders, hContentType, hLocation)
 import qualified Network.Wai as Wai
@@ -80,7 +81,7 @@ defaultApp req sendResponse =
     sendResponse $ Wai.responseLBS
       HTTP.status200
       [(hContentType, "text/plain")]
-      (fromString . show $ Wai.requestHeaders req)
+      (UTF8.fromString . show $ Wai.requestHeaders req)
 
 
 -- Routing faff:
@@ -240,6 +241,7 @@ isPaul _ _ = pure False
 authMiddleware :: Wai.Middleware
 authMiddleware = basicAuth isPaul "Concert API"
 
+interestedSubmissionGet :: Wai.Application
 interestedSubmissionGet = htmlResponse [text|
   <html>
     <head>
@@ -254,11 +256,31 @@ interestedSubmissionGet = htmlResponse [text|
     </body>
   </html>
 |]
+
+
+monadErrorAsMaybe = either (const Nothing) Just
+
+
+-- | This is posted by the web form
+interestedCollectionPost :: Wai.Application
+interestedCollectionPost req sendResponse = do
+    body <- Wai.strictRequestBody req
+    let mUrlE = monadErrorAsMaybe $ UrlE.importString $ UTF8.toString body
+    let email = maybe "bad" id $ mUrlE >>= UrlE.lookup ("email" :: String)
+    sendResponse $ Wai.responseLBS
+        HTTP.status200
+        [(hContentType, "text/plain")]
+        (UTF8.fromString email)
+
+-- | This is used by us to get all the email addresses out
+interestedCollectionGet :: Wai.Application
 interestedCollectionGet = textResponse "interested collection get"
-interestedCollectionPost = textResponse "interested collection post"
+
+
+-- | This sets the users email to verified when they visit
 interestedResource :: Text -> Wai.Application
-interestedResource name =
-   textResponse $ "interested resource get: "
+interestedResource name = textResponse $
+  "interested resource get: " <> (LBS.fromStrict $ encodeUtf8 name)
 
 
 root :: Endpoint
