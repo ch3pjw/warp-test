@@ -90,7 +90,7 @@ data Endpoint' a = Endpoint'
   , epDelete :: Maybe a
   , epOptions :: Maybe a
   , epPatch :: Maybe a
-  , epGetChild :: Maybe (Text -> Endpoint)
+  , epGetChild :: Maybe (Text -> Endpoint' a)
   }
 
 
