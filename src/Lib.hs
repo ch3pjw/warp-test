@@ -4,7 +4,7 @@ module Lib
     ( someFunc
     ) where
 
-import Control.Applicative ((<|>))
+import Control.Applicative
 import Data.ByteString as BS
 import Data.ByteString.Lazy as LBS
 import Data.ByteString.Lazy.UTF8 (fromString)
@@ -60,6 +60,8 @@ defaultApp req sendResponse =
       (fromString . show $ Wai.requestHeaders req)
 
 
+-- Routing faff:
+
 data Endpoint' a = Endpoint'
   { epGet :: Maybe a
   , epHead :: Maybe a
@@ -83,6 +85,49 @@ instance Functor Endpoint' where
       , epPatch = f <$> epPatch ep
       , epGetChild = Nothing}
 
+
+instance Applicative Endpoint' where
+    pure a = Endpoint'
+      { epGet = Just a
+      , epHead = Just a
+      , epPost = Just a
+      , epPut = Just a
+      , epDelete = Just a
+      , epOptions = Just a
+      , epPatch = Just a
+      , epGetChild = Nothing}
+    ep1 <*> ep2 = Endpoint'
+      { epGet = epGet ep1 <*> epGet ep2
+      , epHead = epHead ep1 <*> epHead ep2
+      , epPost = epPost ep1 <*> epPost ep2
+      , epPut = epPut ep1 <*> epPut ep2
+      , epDelete = epDelete ep1 <*> epDelete ep2
+      , epOptions = epOptions ep1 <*> epOptions ep2
+      , epPatch = epPatch ep1 <*> epPatch ep2
+      , epGetChild = Nothing}
+
+
+instance Alternative Endpoint' where
+    empty = Endpoint'
+      { epGet = Nothing
+      , epHead = Nothing
+      , epPost = Nothing
+      , epPut = Nothing
+      , epDelete = Nothing
+      , epOptions = Nothing
+      , epPatch = Nothing
+      , epGetChild = Nothing}
+    ep1 <|> ep2 = Endpoint'
+      { epGet = epGet ep1 <|> epGet ep2
+      , epHead = epHead ep1 <|> epHead ep2
+      , epPost = epPost ep1 <|> epPost ep2
+      , epPut = epPut ep1 <|> epPut ep2
+      , epDelete = epDelete ep1 <|> epDelete ep2
+      , epOptions = epOptions ep1 <|> epOptions ep2
+      , epPatch = epPatch ep1 <|> epPatch ep2
+      , epGetChild = epGetChild ep1 <|> epGetChild ep2}
+
+
 type Endpoint = Endpoint' Wai.Application
 
 methodNotAllowed :: Wai.Application
@@ -91,20 +136,8 @@ methodNotAllowed = textResponse' HTTP.status405 "not allowed"
 notFound :: Wai.Application
 notFound = textResponse' HTTP.status404 "not found"
 
-_endpoint :: Wai.Application -> Endpoint
-_endpoint a = Endpoint'
-  { epGet = Just a
-  , epHead = Just a
-  , epPost = Just a
-  , epPut = Just a
-  , epDelete = Just a
-  , epOptions = Just a
-  , epPatch = Just a
-  , epGetChild = Nothing}
-
 endpoint :: Endpoint
-endpoint = _endpoint methodNotAllowed
-
+endpoint = pure methodNotAllowed
 
 
 getEp :: Wai.Application -> Endpoint
@@ -128,8 +161,8 @@ optionsEp a = endpoint { epOptions = Just a }
 patchEp :: Wai.Application -> Endpoint
 patchEp a = endpoint { epPatch = Just a }
 
-
-type Path = [Text]
+childEp :: (Text -> Endpoint) -> Endpoint
+childEp f = endpoint { epGetChild = Just f }
 
 getEpApp :: HTTP.Method -> Endpoint -> Wai.Application
 getEpApp method ep
@@ -146,11 +179,13 @@ getEpApp method ep
 
 
 notFoundEp :: Endpoint
-notFoundEp = _endpoint notFound
+notFoundEp = pure notFound
 
 endpoints :: [(Text, Endpoint)] -> Text -> Endpoint
 endpoints eps t = maybe notFoundEp id $ lookup t eps
 
+
+type Path = [Text]
 
 dispatchEndpoint :: Endpoint -> Wai.Application
 dispatchEndpoint ep req = handler (Wai.pathInfo req) ep req
@@ -170,25 +205,25 @@ textResponse = textResponse' HTTP.status200
 authMiddleware = id
 interestedCollectionGet = textResponse "interested collection get"
 interestedCollectionPost = textResponse "interested collection post"
+interestedResource :: Text -> Wai.Application
 interestedResource name =
    textResponse $ "interested resource get: "
 
 
 root :: Endpoint
-root = endpoint
-    { epGet = Just defaultApp
-    , epGetChild = Just $ endpoints
-        [ ("david", endpoint {epGet = Just $ githubRedir "foolswood"})
-        , ("paul", endpoint {epGet = Just $ githubRedir "ch3pjw"})
-        , ("interested", endpoint
-            { epGet = Just $ authMiddleware $ interestedCollectionGet
-            , epPost = Just interestedCollectionPost
-            , epGetChild = Just $
-                \name -> endpoint { epGet = Just $ interestedResource name }
-            }
-          )
-        ]
-    }
+root =
+  getEp defaultApp <|>
+  childEp (
+    endpoints
+    [ ("david", getEp $ githubRedir "foolswood")
+    , ("paul", getEp $ githubRedir "ch3pjw")
+    , ("interested"
+      , getEp (authMiddleware $ interestedCollectionGet) <|>
+        postEp interestedCollectionPost <|>
+        childEp (getEp . interestedResource)
+      )
+    ]
+  )
 
 -- main application
 
