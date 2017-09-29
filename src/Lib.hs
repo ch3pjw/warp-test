@@ -160,51 +160,46 @@ methodNotAllowed req sendResponse = sendResponse $ emptyResponse HTTP.status405
 notFound :: Wai.Application
 notFound req sendResponse = sendResponse $ emptyResponse HTTP.status404
 
-endpoint :: Endpoint
-endpoint = pure methodNotAllowed
-
 
 getEp :: Wai.Application -> Endpoint
-getEp a = endpoint { epGet = Just a }
+getEp a = empty { epGet = Just a }
 
 headEp :: Wai.Application -> Endpoint
-headEp a = endpoint { epHead = Just a }
+headEp a = empty { epHead = Just a }
 
 postEp :: Wai.Application -> Endpoint
-postEp a = endpoint { epPost = Just a }
+postEp a = empty { epPost = Just a }
 
 putEp :: Wai.Application -> Endpoint
-putEp a = endpoint { epPut = Just a }
+putEp a = empty { epPut = Just a }
 
 deleteEp :: Wai.Application -> Endpoint
-deleteEp a = endpoint { epDelete = Just a }
+deleteEp a = empty { epDelete = Just a }
 
 optionsEp :: Wai.Application -> Endpoint
-optionsEp a = endpoint { epOptions = Just a }
+optionsEp a = empty { epOptions = Just a }
 
 patchEp :: Wai.Application -> Endpoint
-patchEp a = endpoint { epPatch = Just a }
+patchEp a = empty { epPatch = Just a }
 
 childEp :: (Text -> Endpoint) -> Endpoint
-childEp f = endpoint { epGetChild = Just f }
+childEp f = empty { epGetChild = Just f }
 
 childEps :: [(Text, Endpoint)] -> Endpoint
-childEps eps = endpoint
+childEps eps = empty
   { epGetChild = Just $ \t -> maybe notFoundEp id $ lookup t eps }
 
 
-getEpApp :: HTTP.Method -> Endpoint -> Wai.Application
+getEpApp :: HTTP.Method -> Endpoint -> Maybe Wai.Application
 getEpApp method ep
-  | method == HTTP.methodGet = f $ epGet ep
-  | method == HTTP.methodPost = f $ epPost ep
-  | method == HTTP.methodDelete = f $ epDelete ep
-  | method == HTTP.methodPut = f $ epPut ep
-  | method == HTTP.methodHead = f $ epHead ep
-  | method == HTTP.methodOptions = f $ epOptions ep
-  | method == HTTP.methodPatch = f $ epPatch ep
-  | otherwise = methodNotAllowed
-  where
-    f = maybe methodNotAllowed id
+  | method == HTTP.methodGet = epGet ep
+  | method == HTTP.methodPost = epPost ep
+  | method == HTTP.methodDelete = epDelete ep
+  | method == HTTP.methodPut = epPut ep
+  | method == HTTP.methodHead = epHead ep
+  | method == HTTP.methodOptions = epOptions ep
+  | method == HTTP.methodPatch = epPatch ep
+  | otherwise = pure methodNotAllowed
 
 
 notFoundEp :: Endpoint
@@ -217,7 +212,8 @@ dispatchEndpoint :: Endpoint -> Wai.Application
 dispatchEndpoint ep req = handler (Wai.pathInfo req) ep req
   where
     handler :: Path -> Endpoint -> Wai.Application
-    handler [] ep = getEpApp (Wai.requestMethod req) ep
+    handler [] ep =
+      maybe methodNotAllowed id (getEpApp (Wai.requestMethod req) ep)
     handler (name:names) ep =
       maybe notFound (\f -> (handler names $ f name)) (epGetChild ep)
 
