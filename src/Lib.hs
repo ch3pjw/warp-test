@@ -1,6 +1,8 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
 
 module Lib where
+
+import NeatInterpolation (text)
 
 import Control.Applicative
 import qualified Data.ByteString as BS
@@ -8,6 +10,7 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.ByteString.Lazy.UTF8 (fromString)
 import Data.Monoid ((<>))
 import Data.Text (Text)
+import Data.Text.Encoding (encodeUtf8)
 import qualified Network.HTTP.Types as HTTP
 import Network.HTTP.Types.Header (RequestHeaders, hContentType, hLocation)
 import qualified Network.Wai as Wai
@@ -224,6 +227,12 @@ textResponse' status text req sendResponse = sendResponse $
 
 textResponse = textResponse' HTTP.status200
 
+htmlResponse :: Text -> Wai.Application
+htmlResponse html req sendResponse = sendResponse $ Wai.responseLBS
+    HTTP.status200
+    [(hContentType, "text/html; charset=utf-8")]
+    (LBS.fromStrict $ encodeUtf8 html)
+
 isPaul :: BS.ByteString -> BS.ByteString -> IO Bool
 isPaul "paul" "paul" = pure True
 isPaul _ _ = pure False
@@ -231,6 +240,20 @@ isPaul _ _ = pure False
 authMiddleware :: Wai.Middleware
 authMiddleware = basicAuth isPaul "Concert API"
 
+interestedSubmissionGet = htmlResponse [text|
+  <html>
+    <head>
+      <title>Hello world!</title>
+    </head>
+    <body>
+      <form method="post">
+        Email address:<br/>
+        <input type="text" name="email" /><br/>
+        <input type="submit" value="Go!"/>
+      </form>
+    </body>
+  </html>
+|]
 interestedCollectionGet = textResponse "interested collection get"
 interestedCollectionPost = textResponse "interested collection post"
 interestedResource :: Text -> Wai.Application
@@ -245,10 +268,12 @@ root =
     [ ("david", getEp $ githubRedir "foolswood")
     , ("paul", getEp $ githubRedir "ch3pjw")
     , ("api", authMiddleware <$> childEps
-        [("interested", getEp interestedCollectionGet)]
+        [("interested",
+          getEp interestedCollectionGet
+         )]
       )
     , ("interested"
-      , getEp (authMiddleware $ interestedCollectionGet) <|>
+      , getEp interestedSubmissionGet <|>
         postEp interestedCollectionPost <|>
         childEp (getEp . interestedResource)
       )
