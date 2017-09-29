@@ -164,6 +164,11 @@ patchEp a = endpoint { epPatch = Just a }
 childEp :: (Text -> Endpoint) -> Endpoint
 childEp f = endpoint { epGetChild = Just f }
 
+childEps :: [(Text, Endpoint)] -> Endpoint
+childEps eps = endpoint
+  { epGetChild = Just $ \t -> maybe notFoundEp id $ lookup t eps }
+
+
 getEpApp :: HTTP.Method -> Endpoint -> Wai.Application
 getEpApp method ep
   | method == HTTP.methodGet = f $ epGet ep
@@ -180,9 +185,6 @@ getEpApp method ep
 
 notFoundEp :: Endpoint
 notFoundEp = pure notFound
-
-endpoints :: [(Text, Endpoint)] -> Text -> Endpoint
-endpoints eps t = maybe notFoundEp id $ lookup t eps
 
 
 type Path = [Text]
@@ -213,8 +215,7 @@ interestedResource name =
 root :: Endpoint
 root =
   getEp defaultApp <|>
-  childEp (
-    endpoints
+  childEps
     [ ("david", getEp $ githubRedir "foolswood")
     , ("paul", getEp $ githubRedir "ch3pjw")
     , ("interested"
@@ -223,7 +224,6 @@ root =
         childEp (getEp . interestedResource)
       )
     ]
-  )
 
 -- main application
 
