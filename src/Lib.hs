@@ -103,7 +103,7 @@ instance Functor Endpoint' where
       , epDelete = f <$> epDelete ep
       , epOptions = f <$> epOptions ep
       , epPatch = f <$> epPatch ep
-      , epGetChild = Nothing}
+      , epGetChild = (fmap . fmap . fmap) f (epGetChild ep)}
 
 
 instance Applicative Endpoint' where
@@ -242,6 +242,9 @@ root =
   childEps
     [ ("david", getEp $ githubRedir "foolswood")
     , ("paul", getEp $ githubRedir "ch3pjw")
+    , ("api", authMiddleware <$> childEps
+        [("interested", getEp interestedCollectionGet)]
+      )
     , ("interested"
       , getEp (authMiddleware $ interestedCollectionGet) <|>
         postEp interestedCollectionPost <|>
