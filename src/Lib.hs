@@ -7,6 +7,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.ByteString.Lazy.UTF8 (fromString)
 import Data.Monoid ((<>))
+import Data.Text (Text)
 import qualified Network.HTTP.Types as HTTP
 import Network.HTTP.Types.Header (RequestHeaders, hContentType, hLocation)
 import qualified Network.Wai as Wai
