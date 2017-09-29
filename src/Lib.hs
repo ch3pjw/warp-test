@@ -1,8 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Lib
-    ( someFunc
-    ) where
+module Lib where
 
 import Control.Applicative
 import qualified Data.ByteString as BS
