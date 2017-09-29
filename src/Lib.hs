@@ -60,16 +60,30 @@ defaultApp req sendResponse =
       (fromString . show $ Wai.requestHeaders req)
 
 
-data Endpoint = Endpoint
-  { epGet :: Wai.Application
-  , epHead :: Wai.Application
-  , epPost :: Wai.Application
-  , epPut :: Wai.Application
-  , epDelete :: Wai.Application
-  , epOptions :: Wai.Application
-  , epPatch :: Wai.Application
+data Endpoint' a = Endpoint'
+  { epGet :: Maybe a
+  , epHead :: Maybe a
+  , epPost :: Maybe a
+  , epPut :: Maybe a
+  , epDelete :: Maybe a
+  , epOptions :: Maybe a
+  , epPatch :: Maybe a
   , epGetChild :: Maybe (Text -> Endpoint)
   }
+
+
+instance Functor Endpoint' where
+    fmap f ep = ep
+      { epGet = f <$> epGet ep
+      , epHead = f <$> epHead ep
+      , epPost = f <$> epPost ep
+      , epPut = f <$> epPut ep
+      , epDelete = f <$> epDelete ep
+      , epOptions = f <$> epOptions ep
+      , epPatch = f <$> epPatch ep
+      , epGetChild = Nothing}
+
+type Endpoint = Endpoint' Wai.Application
 
 methodNotAllowed :: Wai.Application
 methodNotAllowed = textResponse' HTTP.status405 "not allowed"
@@ -78,18 +92,58 @@ notFound :: Wai.Application
 notFound = textResponse' HTTP.status404 "not found"
 
 _endpoint :: Wai.Application -> Endpoint
-_endpoint a = Endpoint
-  { epGet = a
-  , epHead = a
-  , epPost = a
-  , epPut = a
-  , epDelete = a
-  , epOptions = a
-  , epPatch = a
+_endpoint a = Endpoint'
+  { epGet = Just a
+  , epHead = Just a
+  , epPost = Just a
+  , epPut = Just a
+  , epDelete = Just a
+  , epOptions = Just a
+  , epPatch = Just a
   , epGetChild = Nothing}
 
 endpoint :: Endpoint
 endpoint = _endpoint methodNotAllowed
+
+
+
+getEp :: Wai.Application -> Endpoint
+getEp a = endpoint { epGet = Just a }
+
+headEp :: Wai.Application -> Endpoint
+headEp a = endpoint { epHead = Just a }
+
+postEp :: Wai.Application -> Endpoint
+postEp a = endpoint { epPost = Just a }
+
+putEp :: Wai.Application -> Endpoint
+putEp a = endpoint { epPut = Just a }
+
+deleteEp :: Wai.Application -> Endpoint
+deleteEp a = endpoint { epDelete = Just a }
+
+optionsEp :: Wai.Application -> Endpoint
+optionsEp a = endpoint { epOptions = Just a }
+
+patchEp :: Wai.Application -> Endpoint
+patchEp a = endpoint { epPatch = Just a }
+
+
+type Path = [Text]
+
+getEpApp :: HTTP.Method -> Endpoint -> Wai.Application
+getEpApp method ep
+  | method == HTTP.methodGet = f $ epGet ep
+  | method == HTTP.methodPost = f $ epPost ep
+  | method == HTTP.methodDelete = f $ epDelete ep
+  | method == HTTP.methodPut = f $ epPut ep
+  | method == HTTP.methodHead = f $ epHead ep
+  | method == HTTP.methodOptions = f $ epOptions ep
+  | method == HTTP.methodPatch = f $ epPatch ep
+  | otherwise = methodNotAllowed
+  where
+    f = maybe methodNotAllowed id
+
 
 notFoundEp :: Endpoint
 notFoundEp = _endpoint notFound
@@ -101,19 +155,10 @@ endpoints eps t = maybe notFoundEp id $ lookup t eps
 dispatchEndpoint :: Endpoint -> Wai.Application
 dispatchEndpoint ep req = handler (Wai.pathInfo req) ep req
   where
-    method = Wai.requestMethod req
-    handler [] ep = getEpApp ep
+    handler :: Path -> Endpoint -> Wai.Application
+    handler [] ep = getEpApp (Wai.requestMethod req) ep
     handler (name:names) ep =
       maybe notFound (\f -> (handler names $ f name)) (epGetChild ep)
-    getEpApp ep
-      | method == HTTP.methodGet = epGet ep
-      | method == HTTP.methodPost = epPost ep
-      | method == HTTP.methodDelete = epDelete ep
-      | method == HTTP.methodPut = epPut ep
-      | method == HTTP.methodHead = epHead ep
-      | method == HTTP.methodOptions = epOptions ep
-      | method == HTTP.methodPatch = epPatch ep
-      | otherwise = methodNotAllowed
 
 
 textResponse' :: HTTP.Status -> LBS.ByteString -> Wai.Application
@@ -131,15 +176,15 @@ interestedResource name =
 
 root :: Endpoint
 root = endpoint
-    { epGet = defaultApp
+    { epGet = Just defaultApp
     , epGetChild = Just $ endpoints
-        [ ("david", endpoint {epGet = githubRedir "foolswood"})
-        , ("paul", endpoint {epGet = githubRedir "ch3pjw"})
+        [ ("david", endpoint {epGet = Just $ githubRedir "foolswood"})
+        , ("paul", endpoint {epGet = Just $ githubRedir "ch3pjw"})
         , ("interested", endpoint
-            { epGet = authMiddleware $ interestedCollectionGet
-            , epPost = interestedCollectionPost
+            { epGet = Just $ authMiddleware $ interestedCollectionGet
+            , epPost = Just interestedCollectionPost
             , epGetChild = Just $
-                \name -> endpoint { epGet = interestedResource name }
+                \name -> endpoint { epGet = Just $ interestedResource name }
             }
           )
         ]
