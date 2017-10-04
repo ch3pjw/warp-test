@@ -150,8 +150,10 @@ setup = do
     return (writer, reader)
 
 
-submitEmailAddress ::
-  EmailAddress -> (Writer, Reader) -> UUID -> IO ()
+type DoAThing = (Writer, Reader) -> UUID -> IO ()
+
+
+submitEmailAddress :: EmailAddress -> DoAThing
 submitEmailAddress e (w, r) uuid = do
     -- FIXME: validate we got an actual email address
     putStrLn $ "Submit: " ++ show uuid
@@ -162,7 +164,7 @@ submitEmailAddress e (w, r) uuid = do
     print events
     void . atomically $ storeEvents w uuid AnyPosition events
 
-verify :: (Writer, Reader) -> UUID -> IO ()
+verify :: DoAThing
 verify (w, r) uuid = do
     putStrLn "Verify"
     p <- atomically $ getLatestStreamProjection r $
@@ -172,7 +174,7 @@ verify (w, r) uuid = do
     print events
     void . atomically $ storeEvents w uuid AnyPosition events
 
-unsubscribe :: (Writer, Reader) -> UUID -> IO ()
+unsubscribe :: DoAThing
 unsubscribe (w, r) uuid = do
     putStrLn "Unsubscribe"
     p <- atomically $ getLatestStreamProjection r $
@@ -183,7 +185,7 @@ unsubscribe (w, r) uuid = do
     void . atomically $ storeEvents w uuid AnyPosition events
 
 
-getAndShowState :: (Writer, Reader) -> UUID -> IO ()
+getAndShowState :: DoAThing
 getAndShowState (w, r) uuid = do
     p <- atomically $ getLatestStreamProjection r $
       versionedStreamProjection uuid initialUserProjection
