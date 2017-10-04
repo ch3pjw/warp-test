@@ -153,36 +153,27 @@ setup = do
 type DoAThing = (Writer, Reader) -> UUID -> IO ()
 
 
-submitEmailAddress :: EmailAddress -> DoAThing
-submitEmailAddress e (w, r) uuid = do
-    -- FIXME: validate we got an actual email address
-    putStrLn $ "Submit: " ++ show uuid
+doThisThing :: UserCommand -> DoAThing
+doThisThing cmd (w, r) uuid = do
     p <- atomically $ getLatestStreamProjection r $
       versionedStreamProjection uuid initialUserProjection
     now <- getCurrentTime
-    let events = commandHandlerHandler (userCommandHandler now) (streamProjectionState p) (Submit e)
+    let events = commandHandlerHandler
+          (userCommandHandler now) (streamProjectionState p) cmd
     print events
     void . atomically $ storeEvents w uuid AnyPosition events
+
+
+submitEmailAddress :: EmailAddress -> DoAThing
+ -- FIXME: validate we got an actual email address
+submitEmailAddress e (w, r) uuid =
+  doThisThing (Submit e) (w, r) uuid >> putStrLn "Submitted" >> print uuid
 
 verify :: DoAThing
-verify (w, r) uuid = do
-    putStrLn "Verify"
-    p <- atomically $ getLatestStreamProjection r $
-      versionedStreamProjection uuid initialUserProjection
-    now <- getCurrentTime
-    let events = commandHandlerHandler (userCommandHandler now) (streamProjectionState p) (Verify)
-    print events
-    void . atomically $ storeEvents w uuid AnyPosition events
+verify = doThisThing Verify
 
 unsubscribe :: DoAThing
-unsubscribe (w, r) uuid = do
-    putStrLn "Unsubscribe"
-    p <- atomically $ getLatestStreamProjection r $
-      versionedStreamProjection uuid initialUserProjection
-    now <- getCurrentTime
-    let events = commandHandlerHandler (userCommandHandler now) (streamProjectionState p) (Unsubscribe)
-    print events
-    void . atomically $ storeEvents w uuid AnyPosition events
+unsubscribe = doThisThing Unsubscribe
 
 
 getAndShowState :: DoAThing
