@@ -29,6 +29,7 @@ type EmailAddress = Text
 
 type Timed a = (DateTime, a)
 
+-- FIXME: from an environment variable or argument
 verificationTimeout :: NominalDiffTime
 verificationTimeout =
   fromRational . toRational $
