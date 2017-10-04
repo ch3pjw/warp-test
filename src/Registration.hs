@@ -65,11 +65,10 @@ withinValidationPeriod _ _ = False
 
 condenseConsecutive :: (Eq a) => [a] -> [a]
 condenseConsecutive [] = []
-condenseConsecutive (a:as) = go a as
-  where
-    go a [] = [a]
-    go a1 (a2:as) | a1 == a2 = a1:as
-                  | otherwise = a1:a2:as
+condenseConsecutive [a] = [a]
+condenseConsecutive (a1:a2:as)
+  | a1 == a2 = condenseConsecutive (a2:as)
+  | otherwise = a1 : condenseConsecutive (a2:as)
 
 data UserEvent
   -- User-generated events:
