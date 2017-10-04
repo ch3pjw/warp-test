@@ -95,7 +95,9 @@ updateUserState s (t, UserVerified) =
 updateUserState s@(UserState vs es _) (t, UserUnsubscribed) =
     s {usPendingEmails = es ++ [UnsubscribeEmail]}
 updateUserState s (t, Emailed UnsubscribeEmail) =
-    s {usPendingEmails = [], usEmailAddress = ""}
+    s {usVerificationState = Unverified
+      , usPendingEmails = []
+      , usEmailAddress = ""}
 updateUserState s@(UserState _ es _) (t, Emailed emailType) =
     s {usPendingEmails = filter (/= emailType) es}
 
