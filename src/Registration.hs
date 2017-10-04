@@ -121,7 +121,10 @@ handleUserCommand now s Verify =
   if withinValidationPeriod now s
   then [(now, UserVerified)]
   else []
-handleUserCommand now s Unsubscribe = [(now, UserUnsubscribed)]
+handleUserCommand now s Unsubscribe =
+  if not . Text.null $ usEmailAddress s
+  then [(now, UserUnsubscribed)]
+  else []
 
 
 type UserCommandHandler =
