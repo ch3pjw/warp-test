@@ -143,55 +143,45 @@ setup = do
     return (writer, reader)
 
 
-type DoAThing = (Writer, Reader) -> UUID -> IO ()
+type UpdateStream = (Writer, Reader) -> UUID -> IO ()
 
 getLatestUserProjection r uuid = atomically $ getLatestStreamProjection r $
     versionedStreamProjection uuid initialUserProjection
 writeEvents w uuid = void . atomically . storeEvents w uuid AnyPosition
 
-
-executeCommand :: UserCommand -> DoAThing
-executeCommand cmd = runModification $ \s t ->
-  return $ commandHandlerHandler (userCommandHandler t) s cmd
+commandAction :: UserCommand -> Action (TimeStamped UserEvent)
+commandAction cmd = \s -> do
+    t <- getCurrentTime
+    return $ commandHandlerHandler (userCommandHandler t) s cmd
 
 
 -- | An Action is a side-effect that reports what it did as events
 type Action e = UserState -> IO [e]
-type Modification = UserState -> DateTime -> IO [TimeStamped UserEvent]
 
 timeStampedAction :: IO DateTime -> Action e -> Action (TimeStamped e)
 timeStampedAction getT a = \s -> do
     t <- getT
     fmap ((,) t) <$> a s
 
-executeAction :: (Writer, Reader) -> UUID -> Action (TimeStamped UserEvent) -> IO ()
-executeAction (w, r) uuid a = getLatestState >>= a >>= writeEvents w uuid
-  where
-    getLatestState = streamProjectionState <$> getLatestUserProjection r uuid
-
-runModification :: Modification -> DoAThing
-runModification f (w, r) uuid = do
-    events <- join $ f <$> getLatestState <*> getCurrentTime
-    print events
-    writeEvents w uuid events
+executeAction :: Action (TimeStamped UserEvent) -> UpdateStream
+executeAction a (w, r) uuid = getLatestState >>= a >>= writeEvents w uuid
   where
     getLatestState = streamProjectionState <$> getLatestUserProjection r uuid
 
 
-
-submitEmailAddress :: EmailAddress -> DoAThing
+submitEmailAddress :: EmailAddress -> UpdateStream
  -- FIXME: validate we got an actual email address
-submitEmailAddress e (w, r) uuid =
-  executeCommand (Submit e) (w, r) uuid >> putStrLn "Submitted" >> print uuid
-
-verify :: DoAThing
-verify = executeCommand Verify
-
-unsubscribe :: DoAThing
-unsubscribe = executeCommand Unsubscribe
+submitEmailAddress e = executeAction $ commandAction (Submit e)
 
 
-getAndShowState :: DoAThing
+verify :: UpdateStream
+verify = executeAction $ commandAction Verify
+
+unsubscribe :: UpdateStream
+unsubscribe = executeAction $ commandAction Unsubscribe
+
+
+getAndShowState :: UpdateStream
 getAndShowState (w, r) uuid = do
     p <- getLatestUserProjection r uuid
     putStrLn . show $ streamProjectionState p
@@ -221,18 +211,19 @@ testLoop = do
 
 
 reactivelyRunAction ::
-    Action (TimeStamped UserEvent) -> (Writer, Reader) -> IO (Maybe UUID) -> IO ()
+    (UUID -> Action (TimeStamped UserEvent)) -> (Writer, Reader) -> IO (Maybe UUID) -> IO ()
 reactivelyRunAction a (w, r) read =
     read >>= maybe (return ()) (\uuid ->
-        executeAction (w, r) uuid a >> reactivelyRunAction a (w, r) read)
+        executeAction (a uuid) (w, r) uuid >> reactivelyRunAction a (w, r) read)
 
 
-sendEmails :: Action UserEvent
-sendEmails s =
+sendEmails :: UUID -> Action UserEvent
+sendEmails uuid s =
     let emails = condenseConsecutive $ usPendingEmails s in
     do
     putStrLn (show emails)
+    putStrLn (show uuid)
     return $ Emailed <$> emails
 
-tsSendEmails :: Action (TimeStamped UserEvent)
-tsSendEmails = timeStampedAction getCurrentTime sendEmails
+tsSendEmails :: UUID -> Action (TimeStamped UserEvent)
+tsSendEmails uuid = timeStampedAction getCurrentTime (sendEmails uuid)
