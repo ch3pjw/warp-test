@@ -88,8 +88,7 @@ updateUserState (UserState vs es _) (t, UserSubmitted e)
       (Pending $ addUTCTime verificationTimeout t)
       (es ++ [VerificationEmail])
       e
-updateUserState s (t, UserVerified) =
-    s {usVerificationState = Verified}
+updateUserState s (t, UserVerified) = s {usVerificationState = Verified}
 updateUserState s@(UserState vs es _) (t, UserUnsubscribed) = initialUserState
 updateUserState s@(UserState _ es _) (t, Emailed emailType) =
     s {usPendingEmails = filter (/= emailType) es}
