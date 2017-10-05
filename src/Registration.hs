@@ -39,7 +39,6 @@ verificationTimeout =
 data EmailType
   = VerificationEmail
   | ConfirmationEmail  -- Having clicked submit whilst verified
-  | UnsubscribeEmail
   deriving (Eq, Show)
 
 data VerificationState
@@ -91,12 +90,7 @@ updateUserState (UserState vs es _) (t, UserSubmitted e)
       e
 updateUserState s (t, UserVerified) =
     s {usVerificationState = Verified}
-updateUserState s@(UserState vs es _) (t, UserUnsubscribed) =
-    s {usPendingEmails = es ++ [UnsubscribeEmail]}
-updateUserState s (t, Emailed UnsubscribeEmail) =
-    s {usVerificationState = Unverified
-      , usPendingEmails = []
-      , usEmailAddress = ""}
+updateUserState s@(UserState vs es _) (t, UserUnsubscribed) = initialUserState
 updateUserState s@(UserState _ es _) (t, Emailed emailType) =
     s {usPendingEmails = filter (/= emailType) es}
 
