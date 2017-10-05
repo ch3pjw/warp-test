@@ -6,7 +6,7 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.STM (STM, atomically)
-import Control.Monad (void, forever)
+import Control.Monad (void, forever, join)
 import Data.DateTime (DateTime, getCurrentTime)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -150,27 +150,33 @@ getLatestUserProjection r uuid = atomically $ getLatestStreamProjection r $
 writeEvents w uuid = void . atomically . storeEvents w uuid AnyPosition
 
 
-doThisThing :: UserCommand -> DoAThing
-doThisThing cmd (w, r) uuid = do
-    p <- getLatestUserProjection r uuid
-    now <- getCurrentTime
-    let events = commandHandlerHandler
-          (userCommandHandler now) (streamProjectionState p) cmd
+executeCommand :: UserCommand -> DoAThing
+executeCommand cmd = runModification $ \s t ->
+  return $ commandHandlerHandler (userCommandHandler t) s cmd
+
+
+type Modification = UserState -> DateTime -> IO [Timed UserEvent]
+
+runModification :: Modification -> DoAThing
+runModification f (w, r) uuid = do
+    events <- join $ f <$> getLatestState <*> getCurrentTime
     print events
     writeEvents w uuid events
+  where
+    getLatestState = streamProjectionState <$> getLatestUserProjection r uuid
 
 
 
 submitEmailAddress :: EmailAddress -> DoAThing
  -- FIXME: validate we got an actual email address
 submitEmailAddress e (w, r) uuid =
-  doThisThing (Submit e) (w, r) uuid >> putStrLn "Submitted" >> print uuid
+  executeCommand (Submit e) (w, r) uuid >> putStrLn "Submitted" >> print uuid
 
 verify :: DoAThing
-verify = doThisThing Verify
+verify = executeCommand Verify
 
 unsubscribe :: DoAThing
-unsubscribe = doThisThing Unsubscribe
+unsubscribe = executeCommand Unsubscribe
 
 
 getAndShowState :: DoAThing
@@ -187,7 +193,7 @@ testLoop :: IO ()
 testLoop = do
   (w, r) <- setup
   (i, o) <- U.newChan
-  withAsync (emailer (w, r) o) $ \a -> forever $ do
+  withAsync (foreverRunModification sendEmails (w, r) o) $ \a -> forever $ do
     putStrLn "Command pls: s <email>, v <uuid>, u <uuid>"
     input <- getLine
     case input of
@@ -202,16 +208,15 @@ testLoop = do
     parseUuidThen f uuid = maybe (putStrLn "rubbish uuid") f $ UUID.fromString uuid
 
 
-emailer :: (Writer, Reader) -> U.OutChan UUID -> IO ()
-emailer (w, r) o = do
-    uuid <- U.readChan o
-    p <- getLatestUserProjection r uuid
-    events <- sendEmails $ streamProjectionState p
-    writeEvents w uuid events
-  where
-    sendEmails s =
-      let emails = condenseConsecutive $ usPendingEmails s in
-      do
-        putStrLn (show emails)
-        now <- getCurrentTime
-        return $ (,) now . Emailed <$> emails
+foreverRunModification ::
+    Modification -> (Writer, Reader) -> U.OutChan UUID -> IO ()
+foreverRunModification f (w, r) o =
+    forever $ U.readChan o >>= runModification f (w, r)
+
+
+sendEmails :: Modification
+sendEmails s t =
+    let emails = condenseConsecutive $ usPendingEmails s in
+    do
+    putStrLn (show emails)
+    return $ (,) t . Emailed <$> emails
