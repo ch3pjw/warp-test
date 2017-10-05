@@ -27,7 +27,7 @@ import Eventful.Store.Memory (
 
 type EmailAddress = Text
 
-type Timed a = (DateTime, a)
+type TimeStamped a = (DateTime, a)
 
 -- FIXME: from an environment variable or argument
 verificationTimeout :: NominalDiffTime
@@ -79,7 +79,7 @@ data UserEvent
   | Emailed EmailType
   deriving (Eq, Show)
 
-updateUserState :: UserState -> Timed UserEvent -> UserState
+updateUserState :: UserState -> TimeStamped UserEvent -> UserState
 updateUserState (UserState vs es _) (t, UserSubmitted e)
   | vs == Verified = UserState
       Verified
@@ -95,7 +95,7 @@ updateUserState s@(UserState _ es _) (t, Emailed emailType) =
     s {usPendingEmails = filter (/= emailType) es}
 
 
-type UserProjection = Projection UserState (Timed UserEvent)
+type UserProjection = Projection UserState (TimeStamped UserEvent)
 
 initialUserProjection = Projection initialUserState updateUserState
 
@@ -107,7 +107,7 @@ data UserCommand
 
 
 handleUserCommand ::
-  DateTime -> UserState -> UserCommand -> [Timed UserEvent]
+  DateTime -> UserState -> UserCommand -> [TimeStamped UserEvent]
 -- Am I missing the point? This handler doesn't seem to do much. Most of the
 -- logic is in the state machine defined by updateRegistrationState, and we
 -- can't have any side effects here...
@@ -123,15 +123,15 @@ handleUserCommand now s Unsubscribe =
 
 
 type UserCommandHandler =
-  CommandHandler UserState (Timed UserEvent) UserCommand
+  CommandHandler UserState (TimeStamped UserEvent) UserCommand
 
 userCommandHandler :: DateTime -> UserCommandHandler
 userCommandHandler now =
   CommandHandler (handleUserCommand now) initialUserProjection
 
 
-type Reader = VersionedEventStoreReader STM (Timed UserEvent)
-type Writer = VersionedEventStoreWriter STM (Timed UserEvent)
+type Reader = VersionedEventStoreReader STM (TimeStamped UserEvent)
+type Writer = VersionedEventStoreWriter STM (TimeStamped UserEvent)
 
 
 setup :: IO (Writer, Reader)
@@ -155,7 +155,7 @@ executeCommand cmd = runModification $ \s t ->
   return $ commandHandlerHandler (userCommandHandler t) s cmd
 
 
-type Modification = UserState -> DateTime -> IO [Timed UserEvent]
+type Modification = UserState -> DateTime -> IO [TimeStamped UserEvent]
 
 runModification :: Modification -> DoAThing
 runModification f (w, r) uuid = do
