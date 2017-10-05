@@ -199,9 +199,9 @@ testLoop = do
     case input of
       's':' ':email -> let e = Text.pack email in
         submitEmailAddress e (w, r) (mockEmailToUuid e) >>
-        U.writeChan i (mockEmailToUuid e)
-      'v':' ':uuid -> parseUuidThen (\u -> verify (w, r) u >> U.writeChan i u) uuid
-      'u':' ':uuid -> parseUuidThen (\u -> unsubscribe (w, r) u >> U.writeChan i u) uuid
+        U.writeChan i (Just $ mockEmailToUuid e)
+      'v':' ':uuid -> parseUuidThen (\u -> verify (w, r) u >> U.writeChan i (Just u)) uuid
+      'u':' ':uuid -> parseUuidThen (\u -> unsubscribe (w, r) u >> U.writeChan i (Just u)) uuid
       'g':' ':uuid -> parseUuidThen (getAndShowState (w, r)) uuid
       _ -> putStrLn "Narp, try again"
   where
@@ -209,9 +209,10 @@ testLoop = do
 
 
 foreverRunModification ::
-    Modification -> (Writer, Reader) -> U.OutChan UUID -> IO ()
+    Modification -> (Writer, Reader) -> U.OutChan (Maybe UUID) -> IO ()
 foreverRunModification f (w, r) o =
-    forever $ U.readChan o >>= runModification f (w, r)
+    U.readChan o >>= maybe (return ()) (\uuid ->
+        runModification f (w, r) uuid >> foreverRunModification f (w, r) o)
 
 
 sendEmails :: Modification
