@@ -155,7 +155,19 @@ executeCommand cmd = runModification $ \s t ->
   return $ commandHandlerHandler (userCommandHandler t) s cmd
 
 
+-- | An Action is a side-effect that reports what it did as events
+type Action e = UserState -> IO [e]
 type Modification = UserState -> DateTime -> IO [TimeStamped UserEvent]
+
+timeStampedAction :: IO DateTime -> Action e -> Action (TimeStamped e)
+timeStampedAction getT a = \s -> do
+    t <- getT
+    fmap ((,) t) <$> a s
+
+executeAction :: (Writer, Reader) -> UUID -> Action (TimeStamped UserEvent) -> IO ()
+executeAction (w, r) uuid a = getLatestState >>= a >>= writeEvents w uuid
+  where
+    getLatestState = streamProjectionState <$> getLatestUserProjection r uuid
 
 runModification :: Modification -> DoAThing
 runModification f (w, r) uuid = do
@@ -193,7 +205,7 @@ testLoop :: IO ()
 testLoop = do
   (w, r) <- setup
   (i, o) <- U.newChan
-  withAsync (foreverRunModification sendEmails (w, r) o) $ \a -> forever $ do
+  withAsync (reactivelyRunAction tsSendEmails (w, r) (U.readChan o)) $ \a -> forever $ do
     putStrLn "Command pls: s <email>, v <uuid>, u <uuid>"
     input <- getLine
     case input of
@@ -208,16 +220,19 @@ testLoop = do
     parseUuidThen f uuid = maybe (putStrLn "rubbish uuid") f $ UUID.fromString uuid
 
 
-foreverRunModification ::
-    Modification -> (Writer, Reader) -> U.OutChan (Maybe UUID) -> IO ()
-foreverRunModification f (w, r) o =
-    U.readChan o >>= maybe (return ()) (\uuid ->
-        runModification f (w, r) uuid >> foreverRunModification f (w, r) o)
+reactivelyRunAction ::
+    Action (TimeStamped UserEvent) -> (Writer, Reader) -> IO (Maybe UUID) -> IO ()
+reactivelyRunAction a (w, r) read =
+    read >>= maybe (return ()) (\uuid ->
+        executeAction (w, r) uuid a >> reactivelyRunAction a (w, r) read)
 
 
-sendEmails :: Modification
-sendEmails s t =
+sendEmails :: Action UserEvent
+sendEmails s =
     let emails = condenseConsecutive $ usPendingEmails s in
     do
     putStrLn (show emails)
-    return $ (,) t . Emailed <$> emails
+    return $ Emailed <$> emails
+
+tsSendEmails :: Action (TimeStamped UserEvent)
+tsSendEmails = timeStampedAction getCurrentTime sendEmails
