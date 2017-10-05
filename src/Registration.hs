@@ -145,16 +145,20 @@ setup = do
 
 type DoAThing = (Writer, Reader) -> UUID -> IO ()
 
+getLatestUserProjection r uuid = atomically $ getLatestStreamProjection r $
+    versionedStreamProjection uuid initialUserProjection
+writeEvents w uuid = void . atomically . storeEvents w uuid AnyPosition
+
 
 doThisThing :: UserCommand -> DoAThing
 doThisThing cmd (w, r) uuid = do
-    p <- atomically $ getLatestStreamProjection r $
-      versionedStreamProjection uuid initialUserProjection
+    p <- getLatestUserProjection r uuid
     now <- getCurrentTime
     let events = commandHandlerHandler
           (userCommandHandler now) (streamProjectionState p) cmd
     print events
-    void . atomically $ storeEvents w uuid AnyPosition events
+    writeEvents w uuid events
+
 
 
 submitEmailAddress :: EmailAddress -> DoAThing
@@ -171,8 +175,7 @@ unsubscribe = doThisThing Unsubscribe
 
 getAndShowState :: DoAThing
 getAndShowState (w, r) uuid = do
-    p <- atomically $ getLatestStreamProjection r $
-      versionedStreamProjection uuid initialUserProjection
+    p <- getLatestUserProjection r uuid
     putStrLn . show $ streamProjectionState p
 
 
@@ -200,16 +203,15 @@ testLoop = do
 
 
 emailer :: (Writer, Reader) -> U.OutChan UUID -> IO ()
-emailer (w, r) o = forever $ do
+emailer (w, r) o = do
     uuid <- U.readChan o
-    threadDelay 1000000
-    p <- atomically $ getLatestStreamProjection r $
-      versionedStreamProjection uuid initialUserProjection
+    p <- getLatestUserProjection r uuid
     events <- sendEmails $ streamProjectionState p
-    now <- getCurrentTime
-    let events' = (,) now <$> events
-    void . atomically $ storeEvents w uuid AnyPosition events'
+    writeEvents w uuid events
   where
     sendEmails s =
       let emails = condenseConsecutive $ usPendingEmails s in
-      putStrLn (show emails) >> return (Emailed <$> emails)
+      do
+        putStrLn (show emails)
+        now <- getCurrentTime
+        return $ (,) now . Emailed <$> emails
