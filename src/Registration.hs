@@ -62,6 +62,7 @@ withinValidationPeriod now (UserState (Pending timeout) _ _ ) = now < timeout
 withinValidationPeriod _ _ = False
 
 
+-- | Converts neigbouring duplicates in a list into a single item
 condenseConsecutive :: (Eq a) => [a] -> [a]
 condenseConsecutive [] = []
 condenseConsecutive [a] = [a]
