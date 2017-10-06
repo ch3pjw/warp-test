@@ -143,45 +143,45 @@ setup = do
     return (writer, reader)
 
 
-type UpdateStream = (Writer, Reader) -> UUID -> IO ()
+-- | An Action is a side-effect that runs on a particular stream's state and
+-- | reports what it did as events
+type Action e = UUID -> UserState -> IO [e]
+type StreamUpdate = (Writer, Reader) -> UUID -> IO ()
 
 getLatestUserProjection r uuid = atomically $ getLatestStreamProjection r $
     versionedStreamProjection uuid initialUserProjection
 writeEvents w uuid = void . atomically . storeEvents w uuid AnyPosition
 
 commandAction :: UserCommand -> Action (TimeStamped UserEvent)
-commandAction cmd = \s -> do
+commandAction cmd = \_ s -> do
     t <- getCurrentTime
     return $ commandHandlerHandler (userCommandHandler t) s cmd
 
-
--- | An Action is a side-effect that reports what it did as events
-type Action e = UserState -> IO [e]
-
 timeStampedAction :: IO DateTime -> Action e -> Action (TimeStamped e)
-timeStampedAction getT a = \s -> do
+timeStampedAction getT a = \u s -> do
     t <- getT
-    fmap ((,) t) <$> a s
+    fmap ((,) t) <$> a u s
 
-executeAction :: Action (TimeStamped UserEvent) -> UpdateStream
-executeAction a (w, r) uuid = getLatestState >>= a >>= writeEvents w uuid
+executeAction :: Action (TimeStamped UserEvent) -> StreamUpdate
+executeAction a (w, r) uuid = getLatestState >>= a uuid >>= writeEvents w uuid
   where
     getLatestState = streamProjectionState <$> getLatestUserProjection r uuid
 
 
-submitEmailAddress :: EmailAddress -> UpdateStream
+submitEmailAddress :: EmailAddress -> StreamUpdate
  -- FIXME: validate we got an actual email address
+ -- MonadFail m => EmailAddress -> m StreamUpdate?
 submitEmailAddress e = executeAction $ commandAction (Submit e)
 
 
-verify :: UpdateStream
+verify :: StreamUpdate
 verify = executeAction $ commandAction Verify
 
-unsubscribe :: UpdateStream
+unsubscribe :: StreamUpdate
 unsubscribe = executeAction $ commandAction Unsubscribe
 
 
-getAndShowState :: UpdateStream
+getAndShowState :: StreamUpdate
 getAndShowState (w, r) uuid = do
     p <- getLatestUserProjection r uuid
     putStrLn . show $ streamProjectionState p
@@ -211,13 +211,13 @@ testLoop = do
 
 
 reactivelyRunAction ::
-    (UUID -> Action (TimeStamped UserEvent)) -> (Writer, Reader) -> IO (Maybe UUID) -> IO ()
+    Action (TimeStamped UserEvent) -> (Writer, Reader) -> IO (Maybe UUID) -> IO ()
 reactivelyRunAction a (w, r) read =
     read >>= maybe (return ()) (\uuid ->
-        executeAction (a uuid) (w, r) uuid >> reactivelyRunAction a (w, r) read)
+        executeAction a (w, r) uuid >> reactivelyRunAction a (w, r) read)
 
 
-sendEmails :: UUID -> Action UserEvent
+sendEmails :: Action UserEvent
 sendEmails uuid s =
     let emails = condenseConsecutive $ usPendingEmails s in
     do
@@ -225,5 +225,5 @@ sendEmails uuid s =
     putStrLn (show uuid)
     return $ Emailed <$> emails
 
-tsSendEmails :: UUID -> Action (TimeStamped UserEvent)
-tsSendEmails uuid = timeStampedAction getCurrentTime (sendEmails uuid)
+tsSendEmails :: Action (TimeStamped UserEvent)
+tsSendEmails = timeStampedAction getCurrentTime sendEmails

@@ -59,7 +59,7 @@ checkInbox o ea et = do
         | otherwise = Left $ "Bad email: " ++ show (a, t)
 
 
-mockSendEmails :: U.InChan Email -> UUID -> Action UserEvent
+mockSendEmails :: U.InChan Email -> Action UserEvent
 mockSendEmails i u s =
     mapM sendEmail . condenseConsecutive $ usPendingEmails s
   where
@@ -68,7 +68,7 @@ mockSendEmails i u s =
         return $ Emailed emailType
     addr = usEmailAddress s
 
-tsMockSendEmails :: U.InChan Email -> UUID -> Action (TimeStamped UserEvent)
+tsMockSendEmails :: U.InChan Email -> Action (TimeStamped UserEvent)
 -- FIXME: this should take a source detailing what the time should be, I
 -- think...
-tsMockSendEmails i uuid = timeStampedAction getCurrentTime (mockSendEmails i uuid)
+tsMockSendEmails i = timeStampedAction getCurrentTime (mockSendEmails i)
