@@ -17,15 +17,24 @@ library
   hs-source-dirs:      src
   exposed-modules:     Lib
                      , Middleware
+                     , Registration
                      , Router
   build-depends:       base >= 4.7 && < 5
+                     , async
                      , bytestring
+                     , datetime
+                     , eventful-core
+                     , eventful-memory
                      , http-types
                      , neat-interpolation
                      , smtp-mail
+                     , stm
+                     , time
                      , text
+                     , unagi-chan
                      , urlencoded
                      , utf8-string
+                     , uuid
                      , wai
                      , wai-extra
                      , warp
