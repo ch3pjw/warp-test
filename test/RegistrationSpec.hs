@@ -12,7 +12,7 @@ import Control.Error.Util (note)
 import Control.Monad
 import Data.DateTime (getCurrentTime)
 import Data.UUID (UUID)
-import System.Timeout
+import qualified System.Timeout as Timeout
 
 import Eventful (uuidFromInteger)
 
@@ -43,15 +43,7 @@ spec = do
               \a -> do
                 submitEmailAddress "paul@concertdaw.co.uk" store uuid1
                 uuid <- checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
-                -- uuid `shouldBeT` uuid1
-                case uuid of
-                  Left s -> fail s
-                  Right u -> if u == uuid1 then return () else fail (show u)
-
-
-
-shouldBeT :: (Traversable t, Eq a, Show a) => t a -> a -> IO ()
-shouldBeT ta a = void . sequence $ (@?= a) <$> ta
+                uuid `shouldBe` uuid1
 
 
 type ChanPair a = (U.InChan a, U.OutChan a)
@@ -65,20 +57,26 @@ setupForTest = do
 uuid1 = uuidFromInteger 1
 
 
+seconds :: (RealFrac a, Integral b) => a -> b
 seconds n = truncate $ n * 1e6
+
+
+timeout :: (RealFrac a) => a -> IO b -> IO b
+timeout n a = Timeout.timeout (seconds n) a >>= maybe (fail "timed out") return
+
+
 
 data Email = Email EmailAddress EmailType UUID deriving (Show, Eq)
 
 -- | Times out if we don't get the expected "email"
 checkInbox ::
-    U.OutChan Email -> EmailAddress -> EmailType -> IO (Either String UUID)
-checkInbox o ea et = do
-    maybeEmail <- timeout (seconds 1) $ U.readChan o
-    return $ note "timed out" maybeEmail >>= checkAndGet
+    U.OutChan Email -> EmailAddress -> EmailType -> IO UUID
+checkInbox o ea et =
+    (timeout 1 $ U.readChan o) >>= checkAndGet
   where
     checkAndGet (Email a t u)
-        | (a, t) == (ea, et) = Right u
-        | otherwise = Left $ "Bad email: " ++ show (a, t)
+        | (a, t) == (ea, et) = return u
+        | otherwise = fail $ "Bad email: " ++ show (a, t)
 
 
 mockSendEmails :: U.InChan Email -> Action UserEvent
