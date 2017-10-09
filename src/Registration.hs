@@ -173,9 +173,8 @@ getLatestUserProjection r uuid = atomically $ getLatestStreamProjection r $
     versionedStreamProjection uuid initialUserProjection
 writeEvents w uuid = void . atomically . storeEvents w uuid AnyPosition
 
-commandAction :: UserCommand -> Action (TimeStamped UserEvent)
-commandAction cmd = \_ s -> do
-    t <- getCurrentTime
+commandAction :: UserCommand -> DateTime -> Action (TimeStamped UserEvent)
+commandAction cmd t = \_ s -> do
     return $ commandHandlerHandler (userCommandHandler t) s cmd
 
 timeStampedAction :: IO DateTime -> Action e -> Action (TimeStamped e)
@@ -184,18 +183,36 @@ timeStampedAction getT a = \u s -> do
     fmap ((,) t) <$> a u s
 
 
+data Actor
+  = Actor
+  { aGetTime :: IO DateTime
+  , aSubmitEmailAddress :: EmailAddress -> StoreUpdate
+  , aVerify :: StoreUpdate
+  , aUnsubscribe :: StoreUpdate
+  }
 
-submitEmailAddress :: EmailAddress -> StoreUpdate
+newActor :: IO DateTime -> Actor
+newActor getT = Actor
+    getT
+    (\e -> wrap $ submitEmailAddress e)
+    (wrap verify)
+    (wrap unsubscribe)
+  where
+    wrap f s u = getT >>= \t -> f t s u
+
+
+
+submitEmailAddress :: EmailAddress -> DateTime -> StoreUpdate
  -- FIXME: validate we got an actual email address
  -- MonadFail m => EmailAddress -> m StreamUpdate?
-submitEmailAddress e = updateStore $ commandAction (Submit e)
+submitEmailAddress e t = updateStore $ commandAction (Submit e) t
 
 
-verify :: StoreUpdate
-verify = updateStore $ commandAction Verify
+verify :: DateTime -> StoreUpdate
+verify = updateStore . commandAction Verify
 
-unsubscribe :: StoreUpdate
-unsubscribe = updateStore $ commandAction Unsubscribe
+unsubscribe :: DateTime -> StoreUpdate
+unsubscribe = updateStore . commandAction Unsubscribe
 
 
 getAndShowState :: StoreUpdate  -- Not really an "update"...
@@ -210,14 +227,15 @@ testLoop :: IO ()
 testLoop = do
   store <- newStore
   o <- sGetNotificationChan store
+  let actor = newActor getCurrentTime
   withAsync (reactivelyRunAction tsSendEmails store (U.readChan o)) $ \a -> forever $ do
     putStrLn "Command pls: s <email>, v <uuid>, u <uuid>"
     input <- getLine
     case input of
       's':' ':email -> let e = Text.pack email in
-        submitEmailAddress e store (mockEmailToUuid e)
-      'v':' ':uuid -> parseUuidThen (\u -> verify store u) uuid
-      'u':' ':uuid -> parseUuidThen (\u -> unsubscribe store u) uuid
+        aSubmitEmailAddress actor e store (mockEmailToUuid e)
+      'v':' ':uuid -> parseUuidThen (\u -> aVerify actor store u) uuid
+      'u':' ':uuid -> parseUuidThen (\u -> aUnsubscribe actor store u) uuid
       'g':' ':uuid -> parseUuidThen (getAndShowState store) uuid
       _ -> putStrLn "Narp, try again"
   where

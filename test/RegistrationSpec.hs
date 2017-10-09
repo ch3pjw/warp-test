@@ -8,9 +8,11 @@ import Test.HUnit ((@?=))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import qualified Control.Concurrent.Chan.Unagi as U
+import Control.Concurrent.MVar
 import Control.Error.Util (note)
 import Control.Monad
-import Data.DateTime (getCurrentTime)
+import Data.DateTime (DateTime)
+import qualified Data.DateTime as DateTime
 import Data.UUID (UUID)
 import qualified System.Timeout as Timeout
 
@@ -37,22 +39,40 @@ spec = do
   before setupForTest $ do
     describe "subscription handling" $ do
       it "should send me an email when I click subscribe" $
-        \(store, uo, (ei, eo)) -> do
+        \(actor, store, uo, (ei, eo)) -> do
           withAsync (
-            reactivelyRunAction (tsMockSendEmails ei) store (U.readChan uo)) $
+            reactivelyRunAction (tsMockSendEmails (aGetTime actor) ei) store (U.readChan uo)) $
               \a -> do
-                submitEmailAddress "paul@concertdaw.co.uk" store uuid1
+                aSubmitEmailAddress actor "paul@concertdaw.co.uk" store uuid1
                 uuid <- checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
                 uuid `shouldBe` uuid1
+                state <- sPoll store uuid
+                -- FIXME: why have so many things fetched the time?
+                state `shouldBe` UserState (Pending $ DateTime.fromSeconds 20) [] "paul@concertdaw.co.uk"
 
 
 type ChanPair a = (U.InChan a, U.OutChan a)
 
+newtype Clock = Clock {clockGetTime :: IO DateTime}
 
-setupForTest :: IO (Store, U.OutChan (Maybe UUID), ChanPair Email)
+newClock :: IO Clock
+newClock = do
+    mVar <- newMVar 0
+    return $ Clock $ getTime mVar
+  where
+    getTime mVar = modifyMVar mVar $ \n ->
+      return (n + 1, DateTime.fromSeconds n)
+
+
+setupForTest :: IO (Actor, Store, U.OutChan (Maybe UUID), ChanPair Email)
 setupForTest = do
+  clock <- newClock
   store <- newStore
-  (,,) <$> return store <*> sGetNotificationChan store <*> U.newChan
+  (,,,)
+    <$> return (newActor $ clockGetTime clock)
+    <*> return store
+    <*> sGetNotificationChan store
+    <*> U.newChan
 
 uuid1 = uuidFromInteger 1
 
@@ -88,7 +108,5 @@ mockSendEmails i u s =
         return $ Emailed emailType
     addr = usEmailAddress s
 
-tsMockSendEmails :: U.InChan Email -> Action (TimeStamped UserEvent)
--- FIXME: this should take a source detailing what the time should be, I
--- think...
-tsMockSendEmails i = timeStampedAction getCurrentTime (mockSendEmails i)
+tsMockSendEmails :: IO DateTime -> U.InChan Email -> Action (TimeStamped UserEvent)
+tsMockSendEmails getT i = timeStampedAction getT (mockSendEmails i)
