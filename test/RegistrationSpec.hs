@@ -50,6 +50,18 @@ spec = do
                 -- FIXME: why have so many things fetched the time?
                 state `shouldBe` UserState (Pending $ DateTime.fromSeconds 20) [] "paul@concertdaw.co.uk"
 
+      it "should regsiter me as verified when I respond to the verification email" $
+        \(actor, store, uo, (ei, eo)) -> do
+          withAsync (
+            reactivelyRunAction (tsMockSendEmails (aGetTime actor) ei) store (U.readChan uo)) $
+              \a -> do
+                aSubmitEmailAddress actor "paul@concertdaw.co.uk" store uuid1
+                uuid <- checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
+                aVerify actor store uuid
+                state <- sPoll store uuid
+                state `shouldBe` UserState Verified [] "paul@concertdaw.co.uk"
+
+
 
 type ChanPair a = (U.InChan a, U.OutChan a)
 
