@@ -1,13 +1,20 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module RegistrationSpec where
 
 import Test.Hspec
+import Test.HUnit ((@?=))
 
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Error.Util (note)
+import Control.Monad
 import Data.DateTime (getCurrentTime)
 import Data.UUID (UUID)
 import System.Timeout
+
+import Eventful (uuidFromInteger)
 
 import Registration
 
@@ -30,28 +37,43 @@ spec = do
   before setupForTest $ do
     describe "subscription handling" $ do
       it "should send me an email when I click subscribe" $
-        \((w, r), (ui, uo), (ei, eo)) -> do
+        \(store, uo, (ei, eo)) -> do
           withAsync (
-            reactivelyRunAction (tsMockSendEmails ei) (w, r) (U.readChan uo)) $ \a ->
-              pending
+            reactivelyRunAction (tsMockSendEmails ei) store (U.readChan uo)) $
+              \a -> do
+                submitEmailAddress "paul@concertdaw.co.uk" store uuid1
+                uuid <- checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
+                -- uuid `shouldBeT` uuid1
+                case uuid of
+                  Left s -> fail s
+                  Right u -> if u == uuid1 then return () else fail (show u)
+
+
+
+shouldBeT :: (Traversable t, Eq a, Show a) => t a -> a -> IO ()
+shouldBeT ta a = void . sequence $ (@?= a) <$> ta
 
 
 type ChanPair a = (U.InChan a, U.OutChan a)
 
 
-setupForTest :: IO ((Writer, Reader), ChanPair (Maybe UUID), ChanPair Email)
-setupForTest = (,,) <$> setup <*> U.newChan <*> U.newChan
+setupForTest :: IO (Store, U.OutChan (Maybe UUID), ChanPair Email)
+setupForTest = do
+  store <- newStore
+  (,,) <$> return store <*> sGetNotificationChan store <*> U.newChan
+
+uuid1 = uuidFromInteger 1
 
 
 seconds n = truncate $ n * 1e6
 
-data Email = Email EmailAddress EmailType UUID
+data Email = Email EmailAddress EmailType UUID deriving (Show, Eq)
 
 -- | Times out if we don't get the expected "email"
 checkInbox ::
     U.OutChan Email -> EmailAddress -> EmailType -> IO (Either String UUID)
 checkInbox o ea et = do
-    maybeEmail <- timeout (seconds 0.1) $ U.readChan o
+    maybeEmail <- timeout (seconds 1) $ U.readChan o
     return $ note "timed out" maybeEmail >>= checkAndGet
   where
     checkAndGet (Email a t u)
@@ -64,7 +86,7 @@ mockSendEmails i u s =
     mapM sendEmail . condenseConsecutive $ usPendingEmails s
   where
     sendEmail emailType = do
-        U.writeChan i $ Email addr emailType (mockEmailToUuid addr)
+        U.writeChan i $ Email addr emailType u
         return $ Emailed emailType
     addr = usEmailAddress s
 
