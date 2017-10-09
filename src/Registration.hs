@@ -164,15 +164,6 @@ updateStore :: Action (TimeStamped UserEvent) -> StoreUpdate
 updateStore = flip _sUpdate
 
 
--- setup :: IO (Writer, Reader)
--- setup = do
---     tvar <- eventMapTVar
---     let
---       writer = tvarEventStoreWriter tvar
---       reader = tvarEventStoreReader tvar
---     return (writer, reader)
-
-
 -- | An Action is a side-effect that runs on a particular stream's state and
 -- | reports what it did as events
 type Action e = UUID -> UserState -> IO [e]
@@ -192,10 +183,6 @@ timeStampedAction getT a = \u s -> do
     t <- getT
     fmap ((,) t) <$> a u s
 
--- executeAction :: Action (TimeStamped UserEvent) -> StreamUpdate
--- executeAction a (w, r) uuid = getLatestState >>= a uuid >>= writeEvents w uuid
---   where
---     getLatestState = streamProjectionState <$> getLatestUserProjection r uuid
 
 
 submitEmailAddress :: EmailAddress -> StoreUpdate
