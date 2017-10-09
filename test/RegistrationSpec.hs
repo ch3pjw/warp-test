@@ -39,23 +39,32 @@ spec = do
 
   around testContext $ do
     describe "subscription handling" $ do
-      it "should send me an email when I click subscribe" $
-        \(actor, store, eo) -> do
+      beforeWith (\(actor, store, eo) -> do
           aSubmitEmailAddress actor "paul@concertdaw.co.uk" store uuid1
           uuid <- checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
-          uuid `shouldBe` uuid1
-          state <- sPoll store uuid
-          -- FIXME: why have so many things fetched the time?
-          state `shouldBe` UserState
-            (Pending $ DateTime.fromSeconds 20) [] "paul@concertdaw.co.uk"
+          return (actor, store, eo, uuid)) $
+        context "once I have submitted my email address" $ do
+          it "should have sent me an email and be waiting for my click" $
+              \(actor, store, eo, uuid) -> do
+                uuid `shouldBe` uuid1
+                state <- sPoll store uuid
+                -- FIXME: why have so many things fetched the time?
+                state `shouldBe` UserState
+                    (Pending $ DateTime.fromSeconds 20) [] "paul@concertdaw.co.uk"
 
-      it "should register me as verified when I respond to the verfn email" $
-        \(actor, store, eo) -> do
-          aSubmitEmailAddress actor "paul@concertdaw.co.uk" store uuid1
-          uuid <- checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
-          aVerify actor store uuid
-          state <- sPoll store uuid
-          state `shouldBe` UserState Verified [] "paul@concertdaw.co.uk"
+          it "should register me as verified when I respond to the verfn email" $
+              \(actor, store, eo, uuid) -> do
+                aVerify actor store uuid
+                state <- sPoll store uuid
+                state `shouldBe` UserState Verified [] "paul@concertdaw.co.uk"
+
+          it "should discard my email address when I unsubscribe" $
+              \(actor, store, eo, uuid) -> do
+              -- FIXME: check from multiple states:
+                aVerify actor store uuid
+                aUnsubscribe actor store uuid
+                state <- sPoll store uuid
+                state `shouldBe` initialUserState
 
 
 
