@@ -10,6 +10,7 @@ import Control.Concurrent.Async
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.MVar
 import Control.Error.Util (note)
+import Control.Exception (bracket)
 import Control.Monad
 import Data.DateTime (DateTime)
 import qualified Data.DateTime as DateTime
@@ -36,30 +37,25 @@ spec = do
     it "should convert neighbouring duplicates into a single item" $
       condenseConsecutive [1, 1, 2, 3, 3, 3, 4] `shouldBe` [1, 2, 3, 4]
 
-  before setupForTest $ do
+  around testContext $ do
     describe "subscription handling" $ do
       it "should send me an email when I click subscribe" $
-        \(actor, store, uo, (ei, eo)) -> do
-          withAsync (
-            reactivelyRunAction (tsMockSendEmails (aGetTime actor) ei) store (U.readChan uo)) $
-              \a -> do
-                aSubmitEmailAddress actor "paul@concertdaw.co.uk" store uuid1
-                uuid <- checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
-                uuid `shouldBe` uuid1
-                state <- sPoll store uuid
-                -- FIXME: why have so many things fetched the time?
-                state `shouldBe` UserState (Pending $ DateTime.fromSeconds 20) [] "paul@concertdaw.co.uk"
+        \(actor, store, eo) -> do
+          aSubmitEmailAddress actor "paul@concertdaw.co.uk" store uuid1
+          uuid <- checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
+          uuid `shouldBe` uuid1
+          state <- sPoll store uuid
+          -- FIXME: why have so many things fetched the time?
+          state `shouldBe` UserState
+            (Pending $ DateTime.fromSeconds 20) [] "paul@concertdaw.co.uk"
 
-      it "should regsiter me as verified when I respond to the verification email" $
-        \(actor, store, uo, (ei, eo)) -> do
-          withAsync (
-            reactivelyRunAction (tsMockSendEmails (aGetTime actor) ei) store (U.readChan uo)) $
-              \a -> do
-                aSubmitEmailAddress actor "paul@concertdaw.co.uk" store uuid1
-                uuid <- checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
-                aVerify actor store uuid
-                state <- sPoll store uuid
-                state `shouldBe` UserState Verified [] "paul@concertdaw.co.uk"
+      it "should register me as verified when I respond to the verfn email" $
+        \(actor, store, eo) -> do
+          aSubmitEmailAddress actor "paul@concertdaw.co.uk" store uuid1
+          uuid <- checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
+          aVerify actor store uuid
+          state <- sPoll store uuid
+          state `shouldBe` UserState Verified [] "paul@concertdaw.co.uk"
 
 
 
@@ -76,15 +72,17 @@ newClock = do
       return (n + 1, DateTime.fromSeconds n)
 
 
-setupForTest :: IO (Actor, Store, U.OutChan (Maybe UUID), ChanPair Email)
-setupForTest = do
+testContext :: ((Actor, Store, U.OutChan Email) -> IO ()) -> IO ()
+testContext spec = do
   clock <- newClock
   store <- newStore
-  (,,,)
-    <$> return (newActor $ clockGetTime clock)
-    <*> return store
-    <*> sGetNotificationChan store
-    <*> U.newChan
+  uo <- sGetNotificationChan store
+  (ei, eo) <- U.newChan
+  let actor = newActor $ clockGetTime clock
+  a <- async $ reactivelyRunAction
+      (tsMockSendEmails (aGetTime actor) ei) store (U.readChan uo)
+  -- FIXME: want better shutdown than cancel:
+  bracket (return (actor, store, eo)) (const $ cancel a) spec
 
 uuid1 = uuidFromInteger 1
 
