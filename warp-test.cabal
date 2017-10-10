@@ -59,6 +59,7 @@ test-suite warp-test-test
                      , eventful-core
                      , HUnit
                      , hspec
+                     , time
                      , unagi-chan
                      , uuid
                      , warp-test
