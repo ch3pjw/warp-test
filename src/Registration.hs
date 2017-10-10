@@ -104,6 +104,7 @@ data UserCommand
   = Submit EmailAddress
   | Verify
   | Unsubscribe
+  deriving (Show, Eq)
 
 
 handleUserCommand ::
