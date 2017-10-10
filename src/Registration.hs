@@ -6,7 +6,7 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.STM (STM, atomically)
-import Control.Monad (void, forever)
+import Control.Monad
 import Data.DateTime (DateTime, getCurrentTime)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -27,7 +27,7 @@ import Eventful.Store.Memory (
 
 type EmailAddress = Text
 
-type Timed a = (DateTime, a)
+type TimeStamped a = (DateTime, a)
 
 -- FIXME: from an environment variable or argument
 verificationTimeout :: NominalDiffTime
@@ -39,7 +39,6 @@ verificationTimeout =
 data EmailType
   = VerificationEmail
   | ConfirmationEmail  -- Having clicked submit whilst verified
-  | UnsubscribeEmail
   deriving (Eq, Show)
 
 data VerificationState
@@ -63,6 +62,7 @@ withinValidationPeriod now (UserState (Pending timeout) _ _ ) = now < timeout
 withinValidationPeriod _ _ = False
 
 
+-- | Converts neigbouring duplicates in a list into a single item
 condenseConsecutive :: (Eq a) => [a] -> [a]
 condenseConsecutive [] = []
 condenseConsecutive [a] = [a]
@@ -79,7 +79,7 @@ data UserEvent
   | Emailed EmailType
   deriving (Eq, Show)
 
-updateUserState :: UserState -> Timed UserEvent -> UserState
+updateUserState :: UserState -> TimeStamped UserEvent -> UserState
 updateUserState (UserState vs es _) (t, UserSubmitted e)
   | vs == Verified = UserState
       Verified
@@ -89,19 +89,13 @@ updateUserState (UserState vs es _) (t, UserSubmitted e)
       (Pending $ addUTCTime verificationTimeout t)
       (es ++ [VerificationEmail])
       e
-updateUserState s (t, UserVerified) =
-    s {usVerificationState = Verified}
-updateUserState s@(UserState vs es _) (t, UserUnsubscribed) =
-    s {usPendingEmails = es ++ [UnsubscribeEmail]}
-updateUserState s (t, Emailed UnsubscribeEmail) =
-    s {usVerificationState = Unverified
-      , usPendingEmails = []
-      , usEmailAddress = ""}
+updateUserState s (t, UserVerified) = s {usVerificationState = Verified}
+updateUserState s@(UserState vs es _) (t, UserUnsubscribed) = initialUserState
 updateUserState s@(UserState _ es _) (t, Emailed emailType) =
     s {usPendingEmails = filter (/= emailType) es}
 
 
-type UserProjection = Projection UserState (Timed UserEvent)
+type UserProjection = Projection UserState (TimeStamped UserEvent)
 
 initialUserProjection = Projection initialUserState updateUserState
 
@@ -113,7 +107,7 @@ data UserCommand
 
 
 handleUserCommand ::
-  DateTime -> UserState -> UserCommand -> [Timed UserEvent]
+  DateTime -> UserState -> UserCommand -> [TimeStamped UserEvent]
 -- Am I missing the point? This handler doesn't seem to do much. Most of the
 -- logic is in the state machine defined by updateRegistrationState, and we
 -- can't have any side effects here...
@@ -129,57 +123,100 @@ handleUserCommand now s Unsubscribe =
 
 
 type UserCommandHandler =
-  CommandHandler UserState (Timed UserEvent) UserCommand
+  CommandHandler UserState (TimeStamped UserEvent) UserCommand
 
 userCommandHandler :: DateTime -> UserCommandHandler
 userCommandHandler now =
   CommandHandler (handleUserCommand now) initialUserProjection
 
 
-type Reader = VersionedEventStoreReader STM (Timed UserEvent)
-type Writer = VersionedEventStoreWriter STM (Timed UserEvent)
+type Reader = VersionedEventStoreReader STM (TimeStamped UserEvent)
+type Writer = VersionedEventStoreWriter STM (TimeStamped UserEvent)
 
+data Store = Store
+  { _sReader :: Reader
+  , _sWriter :: Writer
+  , sGetNotificationChan :: IO (U.OutChan (Maybe UUID))
+  , _sUpdate :: Action (TimeStamped UserEvent) -> UUID -> IO ()
+  -- FIXME: probably for testing only?
+  , sPoll :: UUID -> IO UserState
+  }
 
-setup :: IO (Writer, Reader)
-setup = do
+newStore :: IO Store
+newStore = do
     tvar <- eventMapTVar
     let
-      writer = tvarEventStoreWriter tvar
-      reader = tvarEventStoreReader tvar
-    return (writer, reader)
+      w = tvarEventStoreWriter tvar
+      r = tvarEventStoreReader tvar
+    -- We assume that the unused OutChan gets cleaned up when it goes out of scope
+    (i, _) <- U.newChan
+    let
+        update a uuid = do
+            events <- getLatestState uuid >>= a uuid
+            writeEvents w uuid events
+            -- FIXME: we now can't "shut down" the store...
+            when (not . null $ events) $ U.writeChan i (Just uuid)
+        getLatestState uuid =
+            streamProjectionState <$> getLatestUserProjection r uuid
+    return $ Store r w (U.dupChan i) update getLatestState
+
+updateStore :: Action (TimeStamped UserEvent) -> StoreUpdate
+updateStore = flip _sUpdate
 
 
-type DoAThing = (Writer, Reader) -> UUID -> IO ()
+-- | An Action is a side-effect that runs on a particular stream's state and
+-- | reports what it did as events
+type Action e = UUID -> UserState -> IO [e]
+type StoreUpdate = Store -> UUID -> IO ()
+
+getLatestUserProjection r uuid = atomically $ getLatestStreamProjection r $
+    versionedStreamProjection uuid initialUserProjection
+writeEvents w uuid = void . atomically . storeEvents w uuid AnyPosition
+
+commandAction :: UserCommand -> DateTime -> Action (TimeStamped UserEvent)
+commandAction cmd t = \_ s -> do
+    return $ commandHandlerHandler (userCommandHandler t) s cmd
+
+timeStampedAction :: IO DateTime -> Action e -> Action (TimeStamped e)
+timeStampedAction getT a = \u s -> do
+    t <- getT
+    fmap ((,) t) <$> a u s
 
 
-doThisThing :: UserCommand -> DoAThing
-doThisThing cmd (w, r) uuid = do
-    p <- atomically $ getLatestStreamProjection r $
-      versionedStreamProjection uuid initialUserProjection
-    now <- getCurrentTime
-    let events = commandHandlerHandler
-          (userCommandHandler now) (streamProjectionState p) cmd
-    print events
-    void . atomically $ storeEvents w uuid AnyPosition events
+data Actor
+  = Actor
+  { aGetTime :: IO DateTime
+  , aSubmitEmailAddress :: EmailAddress -> StoreUpdate
+  , aVerify :: StoreUpdate
+  , aUnsubscribe :: StoreUpdate
+  }
+
+newActor :: IO DateTime -> Actor
+newActor getT = Actor
+    getT
+    (\e -> wrap $ submitEmailAddress e)
+    (wrap verify)
+    (wrap unsubscribe)
+  where
+    wrap f s u = getT >>= \t -> f t s u
 
 
-submitEmailAddress :: EmailAddress -> DoAThing
+
+submitEmailAddress :: EmailAddress -> DateTime -> StoreUpdate
  -- FIXME: validate we got an actual email address
-submitEmailAddress e (w, r) uuid =
-  doThisThing (Submit e) (w, r) uuid >> putStrLn "Submitted" >> print uuid
-
-verify :: DoAThing
-verify = doThisThing Verify
-
-unsubscribe :: DoAThing
-unsubscribe = doThisThing Unsubscribe
+ -- MonadFail m => EmailAddress -> m StreamUpdate?
+submitEmailAddress e t = updateStore $ commandAction (Submit e) t
 
 
-getAndShowState :: DoAThing
-getAndShowState (w, r) uuid = do
-    p <- atomically $ getLatestStreamProjection r $
-      versionedStreamProjection uuid initialUserProjection
-    putStrLn . show $ streamProjectionState p
+verify :: DateTime -> StoreUpdate
+verify = updateStore . commandAction Verify
+
+unsubscribe :: DateTime -> StoreUpdate
+unsubscribe = updateStore . commandAction Unsubscribe
+
+
+getAndShowState :: StoreUpdate  -- Not really an "update"...
+getAndShowState s = sPoll s >=> print
 
 
 mockEmailToUuid :: EmailAddress -> UUID
@@ -188,34 +225,34 @@ mockEmailToUuid = uuidFromInteger . fromIntegral . Text.length
 
 testLoop :: IO ()
 testLoop = do
-  (w, r) <- setup
-  (i, o) <- U.newChan
-  withAsync (emailer (w, r) o) $ \a -> forever $ do
+  store <- newStore
+  o <- sGetNotificationChan store
+  let actor = newActor getCurrentTime
+  withAsync (reactivelyRunAction tsSendEmails store (U.readChan o)) $ \a -> forever $ do
     putStrLn "Command pls: s <email>, v <uuid>, u <uuid>"
     input <- getLine
     case input of
       's':' ':email -> let e = Text.pack email in
-        submitEmailAddress e (w, r) (mockEmailToUuid e) >>
-        U.writeChan i (mockEmailToUuid e)
-      'v':' ':uuid -> parseUuidThen (\u -> verify (w, r) u >> U.writeChan i u) uuid
-      'u':' ':uuid -> parseUuidThen (\u -> unsubscribe (w, r) u >> U.writeChan i u) uuid
-      'g':' ':uuid -> parseUuidThen (getAndShowState (w, r)) uuid
+        aSubmitEmailAddress actor e store (mockEmailToUuid e)
+      'v':' ':uuid -> parseUuidThen (\u -> aVerify actor store u) uuid
+      'u':' ':uuid -> parseUuidThen (\u -> aUnsubscribe actor store u) uuid
+      'g':' ':uuid -> parseUuidThen (getAndShowState store) uuid
       _ -> putStrLn "Narp, try again"
   where
     parseUuidThen f uuid = maybe (putStrLn "rubbish uuid") f $ UUID.fromString uuid
 
 
-emailer :: (Writer, Reader) -> U.OutChan UUID -> IO ()
-emailer (w, r) o = forever $ do
-    uuid <- U.readChan o
-    threadDelay 1000000
-    p <- atomically $ getLatestStreamProjection r $
-      versionedStreamProjection uuid initialUserProjection
-    events <- sendEmails $ streamProjectionState p
-    now <- getCurrentTime
-    let events' = (,) now <$> events
-    void . atomically $ storeEvents w uuid AnyPosition events'
-  where
-    sendEmails s =
-      let emails = condenseConsecutive $ usPendingEmails s in
-      putStrLn (show emails) >> return (Emailed <$> emails)
+reactivelyRunAction ::
+    Action (TimeStamped UserEvent) -> Store -> IO (Maybe UUID) -> IO ()
+reactivelyRunAction a store read =
+    read >>= maybe (return ()) (
+        \u -> updateStore a store u >> reactivelyRunAction a store read)
+
+
+sendEmails :: Action UserEvent
+sendEmails uuid s =
+    let emails = condenseConsecutive $ usPendingEmails s in
+    return $ Emailed <$> emails
+
+tsSendEmails :: Action (TimeStamped UserEvent)
+tsSendEmails = timeStampedAction getCurrentTime sendEmails
