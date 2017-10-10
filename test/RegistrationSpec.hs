@@ -198,13 +198,12 @@ data Email = Email EmailAddress EmailType UUID deriving (Show, Eq)
 -- | Times out if we don't get the expected "email"
 checkInbox ::
     U.OutChan Email -> EmailAddress -> EmailType -> IO UUID
-checkInbox o ea et =
-    (timeout 1 $ U.readChan o) >>= checkAndGet
+checkInbox eo ea et =
+    (timeout 0.1 $ U.readChan eo) >>= checkAndGet
   where
     checkAndGet (Email a t u)
         | (a, t) == (ea, et) = return u
         | otherwise = fail $ "Bad email: " ++ show (a, t)
-
 
 mockSendEmails :: U.InChan Email -> Action UserEvent
 mockSendEmails i u s =
