@@ -165,14 +165,13 @@ newStore = do
     return $
       Store r w (U.dupChan i) (U.writeChan i Nothing) update getLatestState
 
-updateStore :: Action (TimeStamped UserEvent) -> StoreUpdate
+updateStore :: Action (TimeStamped UserEvent) -> Store -> UUID -> IO ()
 updateStore = flip _sUpdate
 
 
 -- | An Action is a side-effect that runs on a particular stream's state and
 -- | reports what it did as events
 type Action e = UUID -> UserState -> IO [e]
-type StoreUpdate = Store -> UUID -> IO ()
 
 getLatestUserProjection r uuid = atomically $ getLatestStreamProjection r $
     versionedStreamProjection uuid initialUserProjection
@@ -191,9 +190,9 @@ timeStampedAction getT a = \u s -> do
 data Actor
   = Actor
   { aGetTime :: IO DateTime
-  , aSubmitEmailAddress :: EmailAddress -> StoreUpdate
-  , aVerify :: StoreUpdate
-  , aUnsubscribe :: StoreUpdate
+  , aSubmitEmailAddress :: EmailAddress -> Store -> UUID -> IO ()
+  , aVerify :: Store -> UUID -> IO ()
+  , aUnsubscribe :: Store -> UUID -> IO ()
   }
 
 newActor :: IO DateTime -> Actor
@@ -205,19 +204,19 @@ newActor getT = Actor
   where
     wrap f s u = getT >>= \t -> f t s u
 
-    submitEmailAddress :: EmailAddress -> DateTime -> StoreUpdate
+    submitEmailAddress :: EmailAddress -> DateTime -> Store -> UUID -> IO ()
     -- FIXME: validate we got an actual email address
     -- MonadFail m => EmailAddress -> m StreamUpdate?
     submitEmailAddress e t = updateStore $ commandAction (Submit e) t
 
-    verify :: DateTime -> StoreUpdate
+    verify :: DateTime -> Store -> UUID -> IO ()
     verify = updateStore . commandAction Verify
 
-    unsubscribe :: DateTime -> StoreUpdate
+    unsubscribe :: DateTime -> Store -> UUID -> IO ()
     unsubscribe = updateStore . commandAction Unsubscribe
 
 
-getAndShowState :: StoreUpdate  -- Not really an "update"...
+getAndShowState :: Store -> UUID -> IO ()
 getAndShowState s = sPoll s >=> print
 
 
