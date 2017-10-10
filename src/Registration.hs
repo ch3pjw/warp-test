@@ -205,19 +205,16 @@ newActor getT = Actor
   where
     wrap f s u = getT >>= \t -> f t s u
 
+    submitEmailAddress :: EmailAddress -> DateTime -> StoreUpdate
+    -- FIXME: validate we got an actual email address
+    -- MonadFail m => EmailAddress -> m StreamUpdate?
+    submitEmailAddress e t = updateStore $ commandAction (Submit e) t
 
+    verify :: DateTime -> StoreUpdate
+    verify = updateStore . commandAction Verify
 
-submitEmailAddress :: EmailAddress -> DateTime -> StoreUpdate
- -- FIXME: validate we got an actual email address
- -- MonadFail m => EmailAddress -> m StreamUpdate?
-submitEmailAddress e t = updateStore $ commandAction (Submit e) t
-
-
-verify :: DateTime -> StoreUpdate
-verify = updateStore . commandAction Verify
-
-unsubscribe :: DateTime -> StoreUpdate
-unsubscribe = updateStore . commandAction Unsubscribe
+    unsubscribe :: DateTime -> StoreUpdate
+    unsubscribe = updateStore . commandAction Unsubscribe
 
 
 getAndShowState :: StoreUpdate  -- Not really an "update"...
