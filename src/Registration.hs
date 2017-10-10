@@ -138,6 +138,9 @@ data Store = Store
   { _sReader :: Reader
   , _sWriter :: Writer
   , sGetNotificationChan :: IO (U.OutChan (Maybe UUID))
+  -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
+  -- actually writing to the store...
+  , sSendShutdown :: IO ()
   , _sUpdate :: Action (TimeStamped UserEvent) -> UUID -> IO ()
   -- FIXME: probably for testing only?
   , sPoll :: UUID -> IO UserState
@@ -159,7 +162,8 @@ newStore = do
             when (not . null $ events) $ U.writeChan i (Just uuid)
         getLatestState uuid =
             streamProjectionState <$> getLatestUserProjection r uuid
-    return $ Store r w (U.dupChan i) update getLatestState
+    return $
+      Store r w (U.dupChan i) (U.writeChan i Nothing) update getLatestState
 
 updateStore :: Action (TimeStamped UserEvent) -> StoreUpdate
 updateStore = flip _sUpdate
@@ -229,18 +233,27 @@ testLoop = do
   store <- newStore
   o <- sGetNotificationChan store
   let actor = newActor getCurrentTime
-  withAsync (reactivelyRunAction tsSendEmails store (U.readChan o)) $ \a -> forever $ do
-    putStrLn "Command pls: s <email>, v <uuid>, u <uuid>"
-    input <- getLine
-    case input of
-      's':' ':email -> let e = Text.pack email in
-        aSubmitEmailAddress actor e store (mockEmailToUuid e)
-      'v':' ':uuid -> parseUuidThen (\u -> aVerify actor store u) uuid
-      'u':' ':uuid -> parseUuidThen (\u -> aUnsubscribe actor store u) uuid
-      'g':' ':uuid -> parseUuidThen (getAndShowState store) uuid
-      _ -> putStrLn "Narp, try again"
+  go store actor o
   where
     parseUuidThen f uuid = maybe (putStrLn "rubbish uuid") f $ UUID.fromString uuid
+    go store actor o =
+        withAsync (reactivelyRunAction tsSendEmails store (U.readChan o)) $
+          \a -> do
+            putStrLn "Command pls: s <email>, v <uuid>, u <uuid>, g <uuid>, q"
+            input <- getLine
+            case input of
+              's':' ':email -> let e = Text.pack email in
+                  aSubmitEmailAddress actor e store (mockEmailToUuid e) >>
+                  go store actor o
+              'v':' ':uuid ->
+                  parseUuidThen (\u -> aVerify actor store u) uuid >>
+                  go store actor o
+              'u':' ':uuid ->
+                  parseUuidThen (\u -> aUnsubscribe actor store u) uuid >>
+                  go store actor o
+              'g':' ':uuid -> parseUuidThen (getAndShowState store) uuid
+              'q':_ -> sSendShutdown store
+              _ -> putStrLn "Narp, try again" >> go store actor o
 
 
 reactivelyRunAction ::
