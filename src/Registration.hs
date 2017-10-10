@@ -7,13 +7,18 @@ import Control.Concurrent.Async (withAsync)
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.STM (STM, atomically)
 import Control.Monad
+import qualified Crypto.Hash.SHA256 as SHA256
+import qualified Data.ByteString as BS
 import Data.DateTime (DateTime, getCurrentTime)
+import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import Data.Time.Clock (
   NominalDiffTime, secondsToDiffTime, diffUTCTime, addUTCTime)
 import Data.UUID (UUID, nil)
 import qualified Data.UUID as UUID
+import qualified Data.UUID.V5 as UUIDv5
 
 import Eventful (
   Projection(..), CommandHandler(..), getLatestStreamProjection,
@@ -25,6 +30,7 @@ import Eventful.Store.Memory (
   ExpectedPosition(..), storeEvents)
 
 
+type Salt = Text
 type EmailAddress = Text
 
 type TimeStamped a = (DateTime, a)
@@ -190,30 +196,37 @@ timeStampedAction getT a = \u s -> do
 data Actor
   = Actor
   { aGetTime :: IO DateTime
-  , aSubmitEmailAddress :: EmailAddress -> Store -> UUID -> IO ()
+  , aSubmitEmailAddress :: Store -> EmailAddress -> IO ()
   , aVerify :: Store -> UUID -> IO ()
   , aUnsubscribe :: Store -> UUID -> IO ()
   }
 
-newActor :: IO DateTime -> Actor
-newActor getT = Actor
+newActor :: Salt -> IO DateTime -> Actor
+newActor salt getT = Actor
     getT
-    (\e -> wrap $ submitEmailAddress e)
+    (\s e -> wrap (submitEmailAddress e) s ())
     (wrap verify)
     (wrap unsubscribe)
   where
     wrap f s u = getT >>= \t -> f t s u
 
-    submitEmailAddress :: EmailAddress -> DateTime -> Store -> UUID -> IO ()
-    -- FIXME: validate we got an actual email address
-    -- MonadFail m => EmailAddress -> m StreamUpdate?
-    submitEmailAddress e t = updateStore $ commandAction (Submit e) t
+    submitEmailAddress :: EmailAddress -> DateTime -> Store -> a -> IO ()
+    submitEmailAddress e t s _ = updateStore
+        (commandAction (Submit e) t)
+        s
+        (hashEmail salt e)
 
     verify :: DateTime -> Store -> UUID -> IO ()
     verify = updateStore . commandAction Verify
 
     unsubscribe :: DateTime -> Store -> UUID -> IO ()
     unsubscribe = updateStore . commandAction Unsubscribe
+
+
+hashEmail :: Salt -> EmailAddress -> UUID
+hashEmail salt email =
+    UUIDv5.generateNamed UUIDv5.namespaceOID . BS.unpack . SHA256.hash $
+    (Text.encodeUtf8 $ salt <> email)
 
 
 getAndShowState :: Store -> UUID -> IO ()
@@ -228,7 +241,7 @@ testLoop :: IO ()
 testLoop = do
   store <- newStore
   o <- sGetNotificationChan store
-  let actor = newActor getCurrentTime
+  let actor = newActor "NaCl" getCurrentTime
   go store actor o
   where
     parseUuidThen f uuid = maybe (putStrLn "rubbish uuid") f $ UUID.fromString uuid
@@ -239,8 +252,7 @@ testLoop = do
             input <- getLine
             case input of
               's':' ':email -> let e = Text.pack email in
-                  aSubmitEmailAddress actor e store (mockEmailToUuid e) >>
-                  go store actor o
+                  aSubmitEmailAddress actor store e >> go store actor o
               'v':' ':uuid ->
                   parseUuidThen (\u -> aVerify actor store u) uuid >>
                   go store actor o

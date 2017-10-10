@@ -41,11 +41,13 @@ spec = do
   around testContext $ do
     describe "the subscription handler" $ do
       context "when the email service is running" $ do
+        it "should not let me verify a non-existant email address" $
+          const pending
+
         beforeWith beforeDoASub $
           context "once I have submitted my email address" $ do
             it "should have sent me an email and be waiting for my click" $
               \(clock, actor, store, uo, eo, uuid) -> do
-                uuid `shouldBe` uuid1
                 state <- sPoll store uuid
                 state `shouldSatisfy` userStateEmail "paul@concertdaw.co.uk"
                 state `shouldSatisfy`
@@ -90,8 +92,8 @@ spec = do
           context "once I have verified my email address" $ do
             it "should send me a confirmation email if I verify again" $
               \(clock, actor, store, uo, eo, uuid) -> do
-                aSubmitEmailAddress actor "paul@ruthorn.co.uk" store uuid1
-                uuid' <- checkInbox eo "paul@ruthorn.co.uk" ConfirmationEmail
+                aSubmitEmailAddress actor store "paul@concertdaw.co.uk"
+                uuid' <- checkInbox eo "paul@concertdaw.co.uk" ConfirmationEmail
                 uuid' `shouldBe` uuid
 
             it "should discard my email address when I unsubscribe" $
@@ -119,7 +121,7 @@ spec = do
             pending
   where
     subAndGetEmail a s eo = do
-        aSubmitEmailAddress a "paul@concertdaw.co.uk" s uuid1
+        aSubmitEmailAddress a s "paul@concertdaw.co.uk"
         checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
     checkUnsubscribed (c, a, s, uo, eo, u) = do
         aUnsubscribe a s u
@@ -171,7 +173,7 @@ testContext spec = do
   uo <- sGetNotificationChan store
   uo' <- sGetNotificationChan store
   (ei, eo) <- U.newChan
-  let actor = newActor $ clockGetTime clock
+  let actor = newActor "NaCl" $ clockGetTime clock
   a <- async $ reactivelyRunAction
       (tsMockSendEmails (aGetTime actor) ei) store (U.readChan uo')
   -- FIXME: want better shutdown than cancel:
