@@ -28,7 +28,13 @@ data MailerSettings = MailerSettings
   }
 
 instance Show MailerSettings where
-  show ms = "poop"
+  show ms = (
+       "MailerSettings\n"
+    ++ "  { msSmtpSslSettings = " ++ show (msSmtpSslSettings ms) ++ "\n"
+    ++ "  { msServer = " ++ show (msServer ms) ++ "\n"
+    ++ "  { msUsername = " ++ show (msUsername ms) ++ "\n"
+    ++ "  { msPassword = ****\n"
+    ++ "  { msSenderAddress = " ++ show (msSenderAddress ms) ++ "\n")
 
 type LinkFormatter = UUID -> Text
 
