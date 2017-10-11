@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 
 import Control.Concurrent.Async
@@ -18,16 +20,24 @@ main = do
   ms <- settingsFromEnv UUID.toText UUID.toText
   store <- newStore
   o <- sGetNotificationChan store
-  let actor = newActor getCurrentTime
-  withAsync (mailer ms store (U.readChan o)) $ \a -> forever $ do
-    putStrLn "Command pls: s <email>, v <uuid>, u <uuid>"
-    input <- getLine
-    case input of
-      's':' ':email -> let e = Text.pack email in
-        aSubmitEmailAddress actor e store (mockEmailToUuid e)
-      'v':' ':uuid -> parseUuidThen (\u -> aVerify actor store u) uuid
-      'u':' ':uuid -> parseUuidThen (\u -> aUnsubscribe actor store u) uuid
-      'g':' ':uuid -> parseUuidThen (getAndShowState store) uuid
-      _ -> putStrLn "Narp, try again"
+  let actor = newActor "NaCl" getCurrentTime
+  go ms store actor o
   where
     parseUuidThen f uuid = maybe (putStrLn "rubbish uuid") f $ UUID.fromString uuid
+    go ms store actor o =
+        withAsync (mailer ms store (U.readChan o)) $
+          \a -> do
+            putStrLn "Command pls: s <email>, v <uuid>, u <uuid>, g <uuid>, q"
+            input <- getLine
+            case input of
+              's':' ':email -> let e = Text.pack email in
+                  aSubmitEmailAddress actor store e >> go ms store actor o
+              'v':' ':uuid ->
+                  parseUuidThen (\u -> aVerify actor store u) uuid >>
+                  go ms store actor o
+              'u':' ':uuid ->
+                  parseUuidThen (\u -> aUnsubscribe actor store u) uuid >>
+                  go ms store actor o
+              'g':' ':uuid -> parseUuidThen (getAndShowState store) uuid
+              'q':_ -> sSendShutdown store
+              _ -> putStrLn "Narp, try again" >> go ms store actor o

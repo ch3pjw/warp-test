@@ -7,13 +7,18 @@ import Control.Concurrent.Async (withAsync)
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.STM (STM, atomically)
 import Control.Monad
+import qualified Crypto.Hash.SHA256 as SHA256
+import qualified Data.ByteString as BS
 import Data.DateTime (DateTime, getCurrentTime)
+import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import Data.Time.Clock (
   NominalDiffTime, secondsToDiffTime, diffUTCTime, addUTCTime)
 import Data.UUID (UUID, nil)
 import qualified Data.UUID as UUID
+import qualified Data.UUID.V5 as UUIDv5
 
 import Eventful (
   Projection(..), CommandHandler(..), getLatestStreamProjection,
@@ -25,6 +30,7 @@ import Eventful.Store.Memory (
   ExpectedPosition(..), storeEvents)
 
 
+type Salt = Text
 type EmailAddress = Text
 
 type TimeStamped a = (DateTime, a)
@@ -104,6 +110,7 @@ data UserCommand
   = Submit EmailAddress
   | Verify
   | Unsubscribe
+  deriving (Show, Eq)
 
 
 handleUserCommand ::
@@ -137,6 +144,9 @@ data Store = Store
   { _sReader :: Reader
   , _sWriter :: Writer
   , sGetNotificationChan :: IO (U.OutChan (Maybe UUID))
+  -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
+  -- actually writing to the store...
+  , sSendShutdown :: IO ()
   , _sUpdate :: Action (TimeStamped UserEvent) -> UUID -> IO ()
   -- FIXME: probably for testing only?
   , sPoll :: UUID -> IO UserState
@@ -158,16 +168,16 @@ newStore = do
             when (not . null $ events) $ U.writeChan i (Just uuid)
         getLatestState uuid =
             streamProjectionState <$> getLatestUserProjection r uuid
-    return $ Store r w (U.dupChan i) update getLatestState
+    return $
+      Store r w (U.dupChan i) (U.writeChan i Nothing) update getLatestState
 
-updateStore :: Action (TimeStamped UserEvent) -> StoreUpdate
+updateStore :: Action (TimeStamped UserEvent) -> Store -> UUID -> IO ()
 updateStore = flip _sUpdate
 
 
 -- | An Action is a side-effect that runs on a particular stream's state and
 -- | reports what it did as events
 type Action e = UUID -> UserState -> IO [e]
-type StoreUpdate = Store -> UUID -> IO ()
 
 getLatestUserProjection r uuid = atomically $ getLatestStreamProjection r $
     versionedStreamProjection uuid initialUserProjection
@@ -186,36 +196,40 @@ timeStampedAction getT a = \u s -> do
 data Actor
   = Actor
   { aGetTime :: IO DateTime
-  , aSubmitEmailAddress :: EmailAddress -> StoreUpdate
-  , aVerify :: StoreUpdate
-  , aUnsubscribe :: StoreUpdate
+  , aSubmitEmailAddress :: Store -> EmailAddress -> IO ()
+  , aVerify :: Store -> UUID -> IO ()
+  , aUnsubscribe :: Store -> UUID -> IO ()
   }
 
-newActor :: IO DateTime -> Actor
-newActor getT = Actor
+newActor :: Salt -> IO DateTime -> Actor
+newActor salt getT = Actor
     getT
-    (\e -> wrap $ submitEmailAddress e)
+    (\s e -> wrap (submitEmailAddress e) s ())
     (wrap verify)
     (wrap unsubscribe)
   where
     wrap f s u = getT >>= \t -> f t s u
 
+    submitEmailAddress :: EmailAddress -> DateTime -> Store -> a -> IO ()
+    submitEmailAddress e t s _ = updateStore
+        (commandAction (Submit e) t)
+        s
+        (hashEmail salt e)
+
+    verify :: DateTime -> Store -> UUID -> IO ()
+    verify = updateStore . commandAction Verify
+
+    unsubscribe :: DateTime -> Store -> UUID -> IO ()
+    unsubscribe = updateStore . commandAction Unsubscribe
 
 
-submitEmailAddress :: EmailAddress -> DateTime -> StoreUpdate
- -- FIXME: validate we got an actual email address
- -- MonadFail m => EmailAddress -> m StreamUpdate?
-submitEmailAddress e t = updateStore $ commandAction (Submit e) t
+hashEmail :: Salt -> EmailAddress -> UUID
+hashEmail salt email =
+    UUIDv5.generateNamed UUIDv5.namespaceOID . BS.unpack . SHA256.hash $
+    (Text.encodeUtf8 $ salt <> email)
 
 
-verify :: DateTime -> StoreUpdate
-verify = updateStore . commandAction Verify
-
-unsubscribe :: DateTime -> StoreUpdate
-unsubscribe = updateStore . commandAction Unsubscribe
-
-
-getAndShowState :: StoreUpdate  -- Not really an "update"...
+getAndShowState :: Store -> UUID -> IO ()
 getAndShowState s = sPoll s >=> print
 
 
