@@ -237,33 +237,6 @@ mockEmailToUuid :: EmailAddress -> UUID
 mockEmailToUuid = uuidFromInteger . fromIntegral . Text.length
 
 
-testLoop :: IO ()
-testLoop = do
-  store <- newStore
-  o <- sGetNotificationChan store
-  let actor = newActor "NaCl" getCurrentTime
-  go store actor o
-  where
-    parseUuidThen f uuid = maybe (putStrLn "rubbish uuid") f $ UUID.fromString uuid
-    go store actor o =
-        withAsync (reactivelyRunAction tsSendEmails store (U.readChan o)) $
-          \a -> do
-            putStrLn "Command pls: s <email>, v <uuid>, u <uuid>, g <uuid>, q"
-            input <- getLine
-            case input of
-              's':' ':email -> let e = Text.pack email in
-                  aSubmitEmailAddress actor store e >> go store actor o
-              'v':' ':uuid ->
-                  parseUuidThen (\u -> aVerify actor store u) uuid >>
-                  go store actor o
-              'u':' ':uuid ->
-                  parseUuidThen (\u -> aUnsubscribe actor store u) uuid >>
-                  go store actor o
-              'g':' ':uuid -> parseUuidThen (getAndShowState store) uuid
-              'q':_ -> sSendShutdown store
-              _ -> putStrLn "Narp, try again" >> go store actor o
-
-
 reactivelyRunAction ::
     Action (TimeStamped UserEvent) -> Store -> IO (Maybe UUID) -> IO ()
 reactivelyRunAction a store read =
