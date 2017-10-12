@@ -29,8 +29,9 @@ import Database.Persist.URL (fromDatabaseUrl)
 import qualified Database.Persist.Postgresql as DB
 
 import Eventful (
-  Projection(..), CommandHandler(..), getLatestStreamProjection,
-  versionedStreamProjection, streamProjectionState, uuidFromInteger)
+  Projection(..), CommandHandler(..), StreamProjection, EventVersion,
+  getLatestStreamProjection, versionedStreamProjection, streamProjectionState,
+  uuidFromInteger)
 import Eventful.Store.Class (
   VersionedEventStoreWriter, VersionedEventStoreReader)
 import Eventful.Store.Memory (
@@ -153,9 +154,7 @@ type Reader = VersionedEventStoreReader STM (TimeStamped UserEvent)
 type Writer = VersionedEventStoreWriter STM (TimeStamped UserEvent)
 
 data Store = Store
-  { _sReader :: Reader
-  , _sWriter :: Writer
-  , sGetNotificationChan :: IO (U.OutChan (Maybe UUID))
+  { sGetNotificationChan :: IO (U.OutChan (Maybe UUID))
   -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
   -- actually writing to the store...
   , sSendShutdown :: IO ()
@@ -164,24 +163,36 @@ data Store = Store
   , sPoll :: UUID -> IO UserState
   }
 
+newStoreFrom
+  :: (UUID -> [TimeStamped UserEvent] -> IO ())
+  -> (UUID -> IO (
+         StreamProjection UUID EventVersion UserState (TimeStamped UserEvent))
+     )
+  -> IO Store
+newStoreFrom write getLatestUserProjection = do
+    -- We assume that the unused OutChan gets cleaned up when it goes out of
+    -- scope:
+    (i, _) <- U.newChan
+    let update a uuid = do
+            events <- getLatestState uuid >>= a uuid
+            write uuid events
+            when (not . null $ events) $ U.writeChan i (Just uuid)
+        getLatestState uuid =
+            streamProjectionState <$> getLatestUserProjection uuid
+    return $
+      Store (U.dupChan i) (U.writeChan i Nothing) update getLatestState
+
 newStore :: IO Store
 newStore = do
     tvar <- eventMapTVar
     let
       w = tvarEventStoreWriter tvar
       r = tvarEventStoreReader tvar
-    -- We assume that the unused OutChan gets cleaned up when it goes out of scope
-    (i, _) <- U.newChan
-    let
-        update a uuid = do
-            events <- getLatestState uuid >>= a uuid
-            writeEvents w uuid events
-            -- FIXME: we now can't "shut down" the store...
-            when (not . null $ events) $ U.writeChan i (Just uuid)
-        getLatestState uuid =
-            streamProjectionState <$> getLatestUserProjection r uuid
-    return $
-      Store r w (U.dupChan i) (U.writeChan i Nothing) update getLatestState
+    -- FIXME: AnyPosition always valid?
+    newStoreFrom
+      (\uuid -> void . atomically . storeEvents w uuid AnyPosition)
+      (\uuid -> atomically $ getLatestStreamProjection r $
+          versionedStreamProjection uuid initialUserProjection)
 
 updateStore :: Action (TimeStamped UserEvent) -> Store -> UUID -> IO ()
 updateStore = flip _sUpdate
@@ -190,10 +201,6 @@ updateStore = flip _sUpdate
 -- | An Action is a side-effect that runs on a particular stream's state and
 -- | reports what it did as events
 type Action e = UUID -> UserState -> IO [e]
-
-getLatestUserProjection r uuid = atomically $ getLatestStreamProjection r $
-    versionedStreamProjection uuid initialUserProjection
-writeEvents w uuid = void . atomically . storeEvents w uuid AnyPosition
 
 commandAction :: UserCommand -> DateTime -> Action (TimeStamped UserEvent)
 commandAction cmd t = \_ s -> do
