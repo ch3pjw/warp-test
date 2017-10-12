@@ -3,10 +3,8 @@
 
 module Registration where
 
-import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async (withAsync)
 import qualified Control.Concurrent.Chan.Unagi as U
-import Control.Concurrent.STM (STM, atomically)
+import Control.Concurrent.STM (atomically)
 import Control.Monad
 import Control.Monad.Logger (runNoLoggingT)
 import qualified Crypto.Hash.SHA256 as SHA256
@@ -18,10 +16,8 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Data.Time.Clock (
-  NominalDiffTime, secondsToDiffTime, diffUTCTime, addUTCTime)
-import Data.UUID (UUID, nil)
-import qualified Data.UUID as UUID
+import Data.Time.Clock (NominalDiffTime, secondsToDiffTime, addUTCTime)
+import Data.UUID (UUID)
 import qualified Data.UUID.V5 as UUIDv5
 import System.Environment (getEnv)
 
@@ -32,8 +28,6 @@ import Eventful (
   Projection(..), CommandHandler(..), StreamProjection, EventVersion,
   getLatestStreamProjection, versionedStreamProjection, streamProjectionState,
   uuidFromInteger)
-import Eventful.Store.Class (
-  VersionedEventStoreWriter, VersionedEventStoreReader)
 import Eventful.Store.Memory (
   eventMapTVar, tvarEventStoreWriter, tvarEventStoreReader,
   ExpectedPosition(..), storeEvents)
@@ -74,6 +68,7 @@ data UserState
   } deriving (Eq, Show)
 
 
+initialUserState :: UserState
 initialUserState = UserState Unverified [] ""
 
 withinValidationPeriod :: DateTime -> UserState -> Bool
@@ -108,14 +103,15 @@ updateUserState (UserState vs es _) (t, UserSubmitted e)
       (Pending $ addUTCTime verificationTimeout t)
       (es ++ [VerificationEmail])
       e
-updateUserState s (t, UserVerified) = s {usVerificationState = Verified}
-updateUserState s@(UserState vs es _) (t, UserUnsubscribed) = initialUserState
-updateUserState s@(UserState _ es _) (t, Emailed emailType) =
+updateUserState s (_, UserVerified) = s {usVerificationState = Verified}
+updateUserState (UserState _ _ _) (_, UserUnsubscribed) = initialUserState
+updateUserState s@(UserState _ es _) (_, Emailed emailType) =
     s {usPendingEmails = filter (/= emailType) es}
 
 
 type UserProjection = Projection UserState (TimeStamped UserEvent)
 
+initialUserProjection :: UserProjection
 initialUserProjection = Projection initialUserState updateUserState
 
 
@@ -131,7 +127,7 @@ handleUserCommand ::
 -- Am I missing the point? This handler doesn't seem to do much. Most of the
 -- logic is in the state machine defined by updateRegistrationState, and we
 -- can't have any side effects here...
-handleUserCommand now s (Submit e) = [(now, UserSubmitted e)]
+handleUserCommand now _ (Submit e) = [(now, UserSubmitted e)]
 handleUserCommand now s Verify =
   if withinValidationPeriod now s
   then [(now, UserVerified)]
@@ -255,13 +251,13 @@ mockEmailToUuid = uuidFromInteger . fromIntegral . Text.length
 
 reactivelyRunAction ::
     Action (TimeStamped UserEvent) -> Store -> IO (Maybe UUID) -> IO ()
-reactivelyRunAction a store read =
-    read >>= maybe (return ()) (
-        \u -> updateStore a store u >> reactivelyRunAction a store read)
+reactivelyRunAction a store waitUuid =
+    waitUuid >>= maybe (return ()) (
+        \u -> updateStore a store u >> reactivelyRunAction a store waitUuid)
 
 
 sendEmails :: Action UserEvent
-sendEmails uuid s =
+sendEmails _ s =
     let emails = condenseConsecutive $ usPendingEmails s in
     return $ Emailed <$> emails
 
