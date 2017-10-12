@@ -279,24 +279,24 @@ deriveJSON (aesonPrefix camelCase) ''UserEvent
 
 
 makeStore
-  :: IO ( VersionedEventStoreWriter (DB.SqlPersistT IO) (TimeStamped UserEvent)
+  :: DB.PostgresConf
+  -> IO ( VersionedEventStoreWriter (DB.SqlPersistT IO) (TimeStamped UserEvent)
         , VersionedEventStoreReader (DB.SqlPersistT IO) (TimeStamped UserEvent)
         , DB.ConnectionPool)
-makeStore = do
+makeStore config = do
   let
     writer = serializedEventStoreWriter jsonStringSerializer $
         postgresqlEventStoreWriter defaultSqlEventStoreConfig
     reader = serializedVersionedEventStoreReader jsonStringSerializer $
         sqlEventStoreReader defaultSqlEventStoreConfig
-  connString <- DB.pgConnStr <$> getDatabaseConfig
-  pool <- runNoLoggingT (DB.createPostgresqlPool connString 1)
+  pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr config) 1)
   initializePostgresqlEventStore pool
   return (writer, reader, pool)
 
 
-newDBStore :: IO Store
-newDBStore = do
-  (w, r, pool) <- makeStore
+newDBStore :: DB.PostgresConf -> IO Store
+newDBStore config = do
+  (w, r, pool) <- makeStore config
   newStoreFrom
     (\uuid events -> void $ DB.runSqlPool (storeEvents w uuid AnyPosition events) pool)
     (\uuid -> DB.runSqlPool
