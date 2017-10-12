@@ -113,4 +113,6 @@ mailer settings = reactivelyRunAction
         pending = condenseConsecutive $ usPendingEmails userState
         emails = generateEmail settings uuid userState <$> pending
       in
-        sendEmails settings emails >> return (Emailed <$> pending)
+        case emails of
+          [] -> return []
+          emails -> sendEmails settings emails >> return (Emailed <$> pending)
