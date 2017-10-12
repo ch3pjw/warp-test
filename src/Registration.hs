@@ -150,9 +150,6 @@ userCommandHandler now =
   CommandHandler (handleUserCommand now) initialUserProjection
 
 
-type Reader = VersionedEventStoreReader STM (TimeStamped UserEvent)
-type Writer = VersionedEventStoreWriter STM (TimeStamped UserEvent)
-
 data Store = Store
   { sGetNotificationChan :: IO (U.OutChan (Maybe UUID))
   -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
