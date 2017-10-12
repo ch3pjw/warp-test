@@ -1,7 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Registration where
+module Registration
+  ( condenseConsecutive
+  , EmailAddress
+  , EmailType(..)
+  , UserEvent(Emailed)
+  , TimeStamped
+  , VerificationState(..), verificationTimeout
+  , UserState, usEmailAddress, usPendingEmails, usVerificationState,
+    initialUserState
+  , Store, newStore, newDBStore, sGetNotificationChan, sSendShutdown, sPoll
+  , getAndShowState
+  , Actor, newActor, aSubmitEmailAddress, aVerify, aUnsubscribe, aGetTime
+  , Action
+  , reactivelyRunAction
+  , timeStampedAction
+  , getDatabaseConfig
+  ) where
 
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.STM (atomically)
@@ -11,7 +27,7 @@ import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Aeson.TH (deriveJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
 import qualified Data.ByteString as BS
-import Data.DateTime (DateTime, getCurrentTime)
+import Data.DateTime (DateTime)
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -26,8 +42,7 @@ import qualified Database.Persist.Postgresql as DB
 
 import Eventful (
   Projection(..), CommandHandler(..), StreamProjection, EventVersion,
-  getLatestStreamProjection, versionedStreamProjection, streamProjectionState,
-  uuidFromInteger)
+  getLatestStreamProjection, versionedStreamProjection, streamProjectionState)
 import Eventful.Store.Memory (
   eventMapTVar, tvarEventStoreWriter, tvarEventStoreReader,
   ExpectedPosition(..), storeEvents)
@@ -245,24 +260,11 @@ getAndShowState :: Store -> UUID -> IO ()
 getAndShowState s = sPoll s >=> print
 
 
-mockEmailToUuid :: EmailAddress -> UUID
-mockEmailToUuid = uuidFromInteger . fromIntegral . Text.length
-
-
 reactivelyRunAction ::
     Action (TimeStamped UserEvent) -> Store -> IO (Maybe UUID) -> IO ()
 reactivelyRunAction a store waitUuid =
     waitUuid >>= maybe (return ()) (
         \u -> updateStore a store u >> reactivelyRunAction a store waitUuid)
-
-
-sendEmails :: Action UserEvent
-sendEmails _ s =
-    let emails = condenseConsecutive $ usPendingEmails s in
-    return $ Emailed <$> emails
-
-tsSendEmails :: Action (TimeStamped UserEvent)
-tsSendEmails = timeStampedAction getCurrentTime sendEmails
 
 
 getDatabaseConfig :: IO DB.PostgresConf
