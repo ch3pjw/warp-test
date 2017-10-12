@@ -18,7 +18,7 @@ main :: IO ()
 -- main = getEnv "PORT" >>= someFunc . read
 main = do
   ms <- settingsFromEnv UUID.toText UUID.toText
-  store <- newStore
+  store <- newDBStore
   o <- sGetNotificationChan store
   let actor = newActor "NaCl" getCurrentTime
   go ms store actor o

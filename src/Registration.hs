@@ -52,7 +52,7 @@ type TimeStamped a = (DateTime, a)
 verificationTimeout :: NominalDiffTime
 verificationTimeout =
   fromRational . toRational $
-  secondsToDiffTime $ 10 -- 60 * 60 * 24
+  secondsToDiffTime $ 60 * 60 * 24
 
 
 data EmailType
@@ -292,3 +292,13 @@ makeStore = do
   pool <- runNoLoggingT (DB.createPostgresqlPool connString 1)
   initializePostgresqlEventStore pool
   return (writer, reader, pool)
+
+
+newDBStore :: IO Store
+newDBStore = do
+  (w, r, pool) <- makeStore
+  newStoreFrom
+    (\uuid events -> void $ DB.runSqlPool (storeEvents w uuid AnyPosition events) pool)
+    (\uuid -> DB.runSqlPool
+      (getLatestStreamProjection r $
+        versionedStreamProjection uuid initialUserProjection) pool)
