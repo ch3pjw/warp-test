@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Registration where
 
@@ -8,6 +9,8 @@ import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.STM (STM, atomically)
 import Control.Monad
 import qualified Crypto.Hash.SHA256 as SHA256
+import Data.Aeson.TH (deriveJSON)
+import Data.Aeson.Casing (aesonPrefix, camelCase)
 import qualified Data.ByteString as BS
 import Data.DateTime (DateTime, getCurrentTime)
 import Data.Monoid
@@ -259,3 +262,8 @@ tsSendEmails = timeStampedAction getCurrentTime sendEmails
 
 getDatabaseConfig :: IO DB.PostgresConf
 getDatabaseConfig = join $ fromDatabaseUrl 1 <$> getEnv "DATABASE_URL"
+
+
+deriveJSON (aesonPrefix camelCase) ''EmailType
+deriveJSON (aesonPrefix camelCase) ''VerificationState
+deriveJSON (aesonPrefix camelCase) ''UserEvent
