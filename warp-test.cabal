@@ -27,10 +27,14 @@ library
                      , datetime
                      , eventful-core
                      , eventful-memory
+                     , eventful-postgresql
+                     , eventful-sql-common
                      , http-types
                      , mime-mail
                      , neat-interpolation
                      , HaskellNet-SSL
+                     , persistent-database-url
+                     , persistent-postgresql
                      , stm
                      , time
                      , text

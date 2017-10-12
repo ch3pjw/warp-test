@@ -19,6 +19,10 @@ import Data.Time.Clock (
 import Data.UUID (UUID, nil)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V5 as UUIDv5
+import System.Environment (getEnv)
+
+import Database.Persist.URL (fromDatabaseUrl)
+import qualified Database.Persist.Postgresql as DB
 
 import Eventful (
   Projection(..), CommandHandler(..), getLatestStreamProjection,
@@ -251,3 +255,7 @@ sendEmails uuid s =
 
 tsSendEmails :: Action (TimeStamped UserEvent)
 tsSendEmails = timeStampedAction getCurrentTime sendEmails
+
+
+getDatabaseConfig :: IO DB.PostgresConf
+getDatabaseConfig = join $ fromDatabaseUrl 1 <$> getEnv "DATABASE_URL"
