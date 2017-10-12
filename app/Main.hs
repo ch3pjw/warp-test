@@ -38,6 +38,7 @@ main = do
               'u':' ':uuid ->
                   parseUuidThen (\u -> aUnsubscribe actor store u) uuid >>
                   go ms store actor o
-              'g':' ':uuid -> parseUuidThen (getAndShowState store) uuid
+              'g':' ':uuid -> parseUuidThen (getAndShowState store) uuid >>
+                  go ms store actor o
               'q':_ -> sSendShutdown store
               _ -> putStrLn "Narp, try again" >> go ms store actor o
