@@ -278,27 +278,19 @@ deriveJSON (aesonPrefix camelCase) ''VerificationState
 deriveJSON (aesonPrefix camelCase) ''UserEvent
 
 
-makeStore
-  :: DB.PostgresConf
-  -> IO ( VersionedEventStoreWriter (DB.SqlPersistT IO) (TimeStamped UserEvent)
-        , VersionedEventStoreReader (DB.SqlPersistT IO) (TimeStamped UserEvent)
-        , DB.ConnectionPool)
-makeStore config = do
+newDBStore :: DB.PostgresConf -> IO Store
+newDBStore config =
   let
     writer = serializedEventStoreWriter jsonStringSerializer $
         postgresqlEventStoreWriter defaultSqlEventStoreConfig
     reader = serializedVersionedEventStoreReader jsonStringSerializer $
         sqlEventStoreReader defaultSqlEventStoreConfig
-  pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr config) 1)
-  initializePostgresqlEventStore pool
-  return (writer, reader, pool)
-
-
-newDBStore :: DB.PostgresConf -> IO Store
-newDBStore config = do
-  (w, r, pool) <- makeStore config
-  newStoreFrom
-    (\uuid events -> void $ DB.runSqlPool (storeEvents w uuid AnyPosition events) pool)
-    (\uuid -> DB.runSqlPool
-      (getLatestStreamProjection r $
-        versionedStreamProjection uuid initialUserProjection) pool)
+  in do
+    pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr config) 1)
+    initializePostgresqlEventStore pool
+    newStoreFrom
+      (\uuid events -> void $
+          DB.runSqlPool (storeEvents writer uuid AnyPosition events) pool)
+      (\uuid -> DB.runSqlPool
+          (getLatestStreamProjection reader $
+              versionedStreamProjection uuid initialUserProjection) pool)
