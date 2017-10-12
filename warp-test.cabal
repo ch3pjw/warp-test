@@ -33,6 +33,7 @@ library
                      , eventful-sql-common
                      , http-types
                      , mime-mail
+                     , monad-logger
                      , neat-interpolation
                      , HaskellNet-SSL
                      , persistent-database-url

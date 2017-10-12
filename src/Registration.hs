@@ -8,6 +8,7 @@ import Control.Concurrent.Async (withAsync)
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.STM (STM, atomically)
 import Control.Monad
+import Control.Monad.Logger (runNoLoggingT)
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Aeson.TH (deriveJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
@@ -35,6 +36,10 @@ import Eventful.Store.Class (
 import Eventful.Store.Memory (
   eventMapTVar, tvarEventStoreWriter, tvarEventStoreReader,
   ExpectedPosition(..), storeEvents)
+import Eventful.Store.Postgresql (
+  initializePostgresqlEventStore, defaultSqlEventStoreConfig,
+  sqlEventStoreReader, postgresqlEventStoreWriter, jsonStringSerializer,
+  serializedEventStoreWriter, serializedVersionedEventStoreReader)
 
 
 type Salt = Text
@@ -267,3 +272,19 @@ getDatabaseConfig = join $ fromDatabaseUrl 1 <$> getEnv "DATABASE_URL"
 deriveJSON (aesonPrefix camelCase) ''EmailType
 deriveJSON (aesonPrefix camelCase) ''VerificationState
 deriveJSON (aesonPrefix camelCase) ''UserEvent
+
+
+makeStore
+  :: IO ( VersionedEventStoreWriter (DB.SqlPersistT IO) (TimeStamped UserEvent)
+        , VersionedEventStoreReader (DB.SqlPersistT IO) (TimeStamped UserEvent)
+        , DB.ConnectionPool)
+makeStore = do
+  let
+    writer = serializedEventStoreWriter jsonStringSerializer $
+        postgresqlEventStoreWriter defaultSqlEventStoreConfig
+    reader = serializedVersionedEventStoreReader jsonStringSerializer $
+        sqlEventStoreReader defaultSqlEventStoreConfig
+  connString <- DB.pgConnStr <$> getDatabaseConfig
+  pool <- runNoLoggingT (DB.createPostgresqlPool connString 1)
+  initializePostgresqlEventStore pool
+  return (writer, reader, pool)
