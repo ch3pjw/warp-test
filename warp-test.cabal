@@ -28,6 +28,7 @@ library
                      , bytestring
                      , cryptohash
                      , datetime
+                     , email-validate
                      , eventful-core
                      , eventful-memory
                      , eventful-postgresql

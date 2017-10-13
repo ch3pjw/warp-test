@@ -14,6 +14,7 @@ import Data.Text.Encoding (encodeUtf8)
 import qualified Data.URLEncoded as UrlE
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
+import qualified Text.Email.Validate as Email
 import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.HttpAuth (basicAuth)
 
@@ -82,12 +83,23 @@ interestedCollectionPost :: Wai.Application
 interestedCollectionPost req sendResponse = do
     body <- Wai.strictRequestBody req
     let mUrlE = either (const Nothing) Just $
-          UrlE.importString $ UTF8.toString body
-    let email = maybe "bad" id $ mUrlE >>= UrlE.lookup ("email" :: String)
-    sendResponse $ Wai.responseLBS
-        HTTP.status200
+          UrlE.importString $ LUTF8.toString body
+    -- FIXME: validation should occur somewhere in between request handling and
+    -- storage, but we don't really have a nice place to put it right now.
+    -- FIXME: we also want to do client-side JS validation if we can.
+    let mEmail =
+          mUrlE >>= UrlE.lookup ("email" :: String)
+          >>= Email.canonicalizeEmail . UTF8.fromString
+    case mEmail of
+      (Just canonical) -> sendResponse $ Wai.responseLBS
+            HTTP.status200
+            [(HTTP.hContentType, "text/plain")]
+            (LBS.fromStrict canonical)
+      Nothing -> sendResponse $ Wai.responseLBS
+        HTTP.status400
         [(HTTP.hContentType, "text/plain")]
-        (UTF8.fromString email)
+        "Invalid email address"
+
 
 -- | This is used by us to get all the email addresses out
 interestedCollectionGet :: Wai.Application
