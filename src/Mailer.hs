@@ -117,4 +117,8 @@ mailer settings = reactivelyRunAction
         pending = condenseConsecutive $ usPendingEmails userState
         emails = generateEmail settings uuid userState <$> pending
       in
+        -- FIXME: sendEmails CAN FAIL! E.g. if the server is dead or we send an
+        -- email to an invalid address. At the moment reactivelyRunAction will
+        -- just catch/hide that from us, and because we're just reacting to
+        -- current changes, we'll never repeat the email attempt!
         sendEmails settings emails >> return (Emailed <$> pending)

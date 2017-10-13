@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Registration
   ( condenseConsecutive
@@ -21,6 +22,7 @@ module Registration
 
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.STM (atomically)
+import Control.Exception (catch, SomeException)
 import Control.Monad
 import Control.Monad.Logger (runNoLoggingT)
 import qualified Crypto.Hash.SHA256 as SHA256
@@ -264,7 +266,10 @@ reactivelyRunAction ::
     Action (TimeStamped UserEvent) -> Store -> IO (Maybe UUID) -> IO ()
 reactivelyRunAction a store waitUuid =
     waitUuid >>= maybe (return ()) (
-        \u -> updateStore a store u >> reactivelyRunAction a store waitUuid)
+        -- We catch any exception the action raises because it shouldn't be able
+        -- to bring down the entire reaction loop:
+        \u -> (updateStore a store u `catch` (\(_ :: SomeException) -> return ()))
+            >> reactivelyRunAction a store waitUuid)
 
 
 getDatabaseConfig :: IO DB.PostgresConf
