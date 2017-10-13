@@ -67,7 +67,8 @@ spec = do
               \(clock, actor, store, uo, eo, uuid) -> do
                 aVerify actor store uuid
                 state <- sPoll store uuid
-                state `shouldBe` UserState Verified [] "paul@concertdaw.co.uk"
+                state `shouldSatisfy` userStateEmail "paul@concertdaw.co.uk"
+                state `shouldSatisfy` userStateVerification Verified
 
             it "should reject my verification if it is tardy" $
               \(clock, actor, store, uo, eo, uuid) -> do

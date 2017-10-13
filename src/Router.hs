@@ -85,10 +85,10 @@ emptyResponse :: HTTP.Status -> Wai.Response
 emptyResponse s = Wai.responseBuilder s [] mempty
 
 methodNotAllowed :: Wai.Application
-methodNotAllowed req sendResponse = sendResponse $ emptyResponse HTTP.status405
+methodNotAllowed _ sendResponse = sendResponse $ emptyResponse HTTP.status405
 
 notFound :: Wai.Application
-notFound req sendResponse = sendResponse $ emptyResponse HTTP.status404
+notFound _ sendResponse = sendResponse $ emptyResponse HTTP.status404
 
 
 getEp :: Wai.Application -> Endpoint
@@ -142,7 +142,7 @@ dispatch :: Endpoint -> Wai.Application
 dispatch ep req = handler (Wai.pathInfo req) ep req
   where
     handler :: Path -> Endpoint -> Wai.Application
-    handler [] ep =
-      maybe methodNotAllowed id (getEpApp (Wai.requestMethod req) ep)
-    handler (name:names) ep =
-      maybe notFound (\f -> (handler names $ f name)) (epGetChild ep)
+    handler [] ep' =
+      maybe methodNotAllowed id (getEpApp (Wai.requestMethod req) ep')
+    handler (name:names) ep' =
+      maybe notFound (\f -> (handler names $ f name)) (epGetChild ep')

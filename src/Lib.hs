@@ -23,7 +23,7 @@ import Middleware (forceTls, prettifyError)
 -- Redirect sub-application
 
 githubRedir :: BS.ByteString -> Wai.Application
-githubRedir user req sendResponse =
+githubRedir user _ sendResponse =
     sendResponse $ Wai.responseBuilder
       HTTP.status307
       [(HTTP.hLocation, "https://github.com/" <> user)]
@@ -41,13 +41,14 @@ defaultApp req sendResponse =
 
 
 textResponse' :: HTTP.Status -> LBS.ByteString -> Wai.Application
-textResponse' status text req sendResponse = sendResponse $
-    Wai.responseLBS status [(HTTP.hContentType, "text/plain")] text
+textResponse' status body _ sendResponse = sendResponse $
+    Wai.responseLBS status [(HTTP.hContentType, "text/plain")] body
 
+textResponse :: LBS.ByteString -> Wai.Application
 textResponse = textResponse' HTTP.status200
 
 htmlResponse :: Text -> Wai.Application
-htmlResponse html req sendResponse = sendResponse $ Wai.responseLBS
+htmlResponse html _ sendResponse = sendResponse $ Wai.responseLBS
     HTTP.status200
     [(HTTP.hContentType, "text/html; charset=utf-8")]
     (LBS.fromStrict $ encodeUtf8 html)
@@ -76,14 +77,12 @@ interestedSubmissionGet = htmlResponse [text|
 |]
 
 
-monadErrorAsMaybe = either (const Nothing) Just
-
-
 -- | This is posted by the web form
 interestedCollectionPost :: Wai.Application
 interestedCollectionPost req sendResponse = do
     body <- Wai.strictRequestBody req
-    let mUrlE = monadErrorAsMaybe $ UrlE.importString $ UTF8.toString body
+    let mUrlE = either (const Nothing) Just $
+          UrlE.importString $ UTF8.toString body
     let email = maybe "bad" id $ mUrlE >>= UrlE.lookup ("email" :: String)
     sendResponse $ Wai.responseLBS
         HTTP.status200
