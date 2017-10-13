@@ -43,6 +43,12 @@ packages:
     subdirs:
      - eventful-core
      - eventful-memory
+     - eventful-sql-common
+     - eventful-postgresql
+    extra-dep: true
+  - location:
+      git: git@github.com:thoughtbot/persistent-database-url.git
+      commit: 09782a464f4c50f91b78e118ae56010636cd38cd
     extra-dep: true
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)

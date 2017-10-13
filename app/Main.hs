@@ -18,7 +18,7 @@ main :: IO ()
 -- main = getEnv "PORT" >>= someFunc . read
 main = do
   ms <- settingsFromEnv UUID.toText UUID.toText
-  store <- newStore
+  store <- getDatabaseConfig >>= newDBStore
   o <- sGetNotificationChan store
   let actor = newActor "NaCl" getCurrentTime
   go ms store actor o
@@ -38,6 +38,7 @@ main = do
               'u':' ':uuid ->
                   parseUuidThen (\u -> aUnsubscribe actor store u) uuid >>
                   go ms store actor o
-              'g':' ':uuid -> parseUuidThen (getAndShowState store) uuid
+              'g':' ':uuid -> parseUuidThen (getAndShowState store) uuid >>
+                  go ms store actor o
               'q':_ -> sSendShutdown store
               _ -> putStrLn "Narp, try again" >> go ms store actor o

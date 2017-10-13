@@ -21,16 +21,23 @@ library
                      , Registration
                      , Router
   build-depends:       base >= 4.7 && < 5
+                     , aeson
+                     , aeson-casing
                      , async
                      , bytestring
                      , cryptohash
                      , datetime
                      , eventful-core
                      , eventful-memory
+                     , eventful-postgresql
+                     , eventful-sql-common
                      , http-types
                      , mime-mail
+                     , monad-logger
                      , neat-interpolation
                      , HaskellNet-SSL
+                     , persistent-database-url
+                     , persistent-postgresql
                      , stm
                      , time
                      , text
