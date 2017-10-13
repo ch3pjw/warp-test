@@ -4,13 +4,11 @@ module Main where
 
 import Control.Concurrent.Async
 import qualified Control.Concurrent.Chan.Unagi as U
-import Control.Monad
 import Data.DateTime (getCurrentTime)
 import qualified Data.Text as Text
 import qualified Data.UUID as UUID
-import System.Environment (getEnv)
+-- import System.Environment (getEnv)
 
-import Lib
 import Registration
 import Mailer
 
@@ -26,7 +24,7 @@ main = do
     parseUuidThen f uuid = maybe (putStrLn "rubbish uuid") f $ UUID.fromString uuid
     go ms store actor o =
         withAsync (mailer ms store (U.readChan o)) $
-          \a -> do
+          \_ -> do
             putStrLn "Command pls: s <email>, v <uuid>, u <uuid>, g <uuid>, q"
             input <- getLine
             case input of

@@ -1,8 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Mailer where
+module Mailer
+  ( MailerSettings(..)
+  , settingsFromEnv
+  , mailer
+  ) where
 
-import Data.Maybe
 import Data.DateTime (getCurrentTime)
 import Data.Text (Text)
 import Data.Text.Format (format)
@@ -61,7 +64,7 @@ settingsFromEnv formatVLink formatULink =
 
 
 sendEmails :: MailerSettings -> [Mime.Mail] -> IO ()
-sendEmails settings [] = return ()
+sendEmails _ [] = return ()
 sendEmails settings emails =
     SMTP.doSMTPSSLWithSettings
       (msServer settings)
