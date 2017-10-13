@@ -4,7 +4,6 @@ module Middleware
   (forceTls, prettifyError)
 where
 
-import Control.Applicative
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Monoid
@@ -38,7 +37,7 @@ forceTls app req sendResponse =
 
 replaceHeaders ::
   (HTTP.HeaderName, BS.ByteString) -> [HTTP.Header] -> [HTTP.Header]
-replaceHeaders h@(hName, hValue) = (h:) . filter (\(n, v) -> n /= hName)
+replaceHeaders h@(hName, _) = (h:) . filter (\(n, _) -> n /= hName)
 
 -- | Error prettifying middleware
 prettifyError :: Wai.Middleware
