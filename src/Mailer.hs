@@ -61,14 +61,15 @@ settingsFromEnv formatVLink formatULink =
 
 
 sendEmails :: MailerSettings -> [Mime.Mail] -> IO ()
-sendEmails settings mails =
+sendEmails settings [] = return ()
+sendEmails settings emails =
     SMTP.doSMTPSSLWithSettings
       (msServer settings)
       (msSmtpSslSettings settings) $ \conn -> do
     authSuccess <- SMTP.authenticate
       SMTP.LOGIN (msUsername settings) (msPassword settings) conn
     if authSuccess
-      then mapM_ (flip SMTP.sendMimeMail2 conn) mails
+      then mapM_ (flip SMTP.sendMimeMail2 conn) emails
       else putStrLn "SMTP: authentication error."
 
 
@@ -113,6 +114,4 @@ mailer settings = reactivelyRunAction
         pending = condenseConsecutive $ usPendingEmails userState
         emails = generateEmail settings uuid userState <$> pending
       in
-        case emails of
-          [] -> return []
-          emails -> sendEmails settings emails >> return (Emailed <$> pending)
+        sendEmails settings emails >> return (Emailed <$> pending)
