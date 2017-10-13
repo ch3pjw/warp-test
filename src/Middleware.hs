@@ -49,6 +49,8 @@ prettifyError app req sendResponse = app req mySendResponse
       if HTTP.statusIsSuccessful status
       then sendResponse response
       else sendResponse $ Wai.responseLBS
+        -- FIXME: this should probably do something smarter. It could combine
+        -- the response body with a template?
         status
         (replaceHeaders (HTTP.hContentType, "text/plain") $
          Wai.responseHeaders response)
