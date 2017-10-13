@@ -2,7 +2,7 @@
 
 module Mailer
   ( MailerSettings(..)
-  , settingsFromEnv
+  , mailerSettingsFromEnv
   , mailer
   ) where
 
@@ -42,8 +42,8 @@ instance Show MailerSettings where
 type LinkFormatter = UUID -> Text
 
 
-settingsFromEnv :: LinkFormatter -> LinkFormatter -> IO MailerSettings
-settingsFromEnv formatVLink formatULink =
+mailerSettingsFromEnv :: LinkFormatter -> LinkFormatter -> IO MailerSettings
+mailerSettingsFromEnv formatVLink formatULink =
     buildEnv
       <$> lookupEnv "SMTP_LOGGING"
       <*> getEnv "SMTP_SERVER"

@@ -15,7 +15,7 @@ import Mailer
 main :: IO ()
 -- main = getEnv "PORT" >>= someFunc . read
 main = do
-  ms <- settingsFromEnv UUID.toText UUID.toText
+  ms <- mailerSettingsFromEnv UUID.toText UUID.toText
   store <- getDatabaseConfig >>= newDBStore
   o <- sGetNotificationChan store
   let actor = newActor "NaCl" getCurrentTime
