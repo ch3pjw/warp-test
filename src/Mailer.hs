@@ -7,6 +7,7 @@ module Mailer
   ) where
 
 import Data.DateTime (getCurrentTime)
+import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Format (format)
 import Data.UUID (UUID)
@@ -84,7 +85,13 @@ verificationEmail from to verificationLink unsubscribeLink =
     -- FIXME: format isn't type-checked, so we need to write tests for these
     -- functions to make sure we haven't mis-matched our arguments
     body = format
-      "Some kind of nicely formatted body with {} and {} in the middle"
+      (  "Hi,\n\n"
+      <> "Thanks for registering your interest in Concert! Please verify your "
+      <> "email address using the link below:\n\n{}\n\n"
+      <> "Thanks!\nThe Concert Team\n\n"
+      <> "Your verification link will remain active for 24 hrs\n"
+      <> "If you don't want to hear from us any more, you can use the "
+      <> "following link to unsubscribe at any time:\n\n{}\n\n")
       [verificationLink, unsubscribeLink]
 
 confirmationEmail :: Mime.Address -> Mime.Address -> Text -> Mime.Mail
@@ -93,7 +100,14 @@ confirmationEmail from to unsubscribeLink =
   where
     subject = "Subscription confirmed"
     body = format
-      "You've already signed up etc... Unsubscribe with {}" [unsubscribeLink]
+      (  "Hi,\n\n"
+      <> "You've already registered your interest in Concert. We'll let you "
+      <> "know when we've got news about our software or we need volunteers to"
+      <> "beta test our latest release.\n\n"
+      <> "Thanks!\nThe Concert Team"
+      <> "If you don't want to hear from us any more, you can use the "
+      <> "following link to unsubscribe at any time:\n\n{}\n\n")
+      [unsubscribeLink]
 
 
 generateEmail :: MailerSettings -> UUID -> UserState -> EmailType -> Mime.Mail
