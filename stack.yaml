@@ -38,7 +38,7 @@ resolver: lts-9.6
 packages:
   - '.'
   - location:
-      git: git@github.com:jdreaver/eventful.git
+      git: https://github.com/jdreaver/eventful.git
       commit: 374f603c6717b360231d4ff61eaeb895835d889d
     subdirs:
      - eventful-core
@@ -47,7 +47,7 @@ packages:
      - eventful-postgresql
     extra-dep: true
   - location:
-      git: git@github.com:thoughtbot/persistent-database-url.git
+      git: https://github.com/thoughtbot/persistent-database-url.git
       commit: 09782a464f4c50f91b78e118ae56010636cd38cd
     extra-dep: true
 # Dependency packages to be pulled from upstream that are not in the resolver
