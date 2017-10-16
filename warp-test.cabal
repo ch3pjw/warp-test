@@ -37,6 +37,7 @@ library
                      , http-types
                      , mime-mail
                      , monad-logger
+                     , mtl
                      , neat-interpolation
                      , HaskellNet-SSL
                      , persistent-database-url

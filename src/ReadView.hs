@@ -10,6 +10,7 @@ module ReadView where
 
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Reader (ReaderT)
 import Data.Pool (Pool)
 import Data.UUID (UUID, nil)
 import Database.Persist.Postgresql ((=.), (==.))
@@ -48,8 +49,8 @@ latestEvents latestHandled =
 
 
 handleUserStateReadModelEvents
-  :: Pool DB.SqlBackend -> [GlobalStreamEvent (TimeStamped UserEvent)] -> IO ()
-handleUserStateReadModelEvents pool events = DB.runSqlPool updates pool
+  :: [GlobalStreamEvent (TimeStamped UserEvent)] -> ReaderT DB.SqlBackend IO ()
+handleUserStateReadModelEvents = mapM_ (uncurry mutate . decomposeEvent)
   where
     mutate uuid (_, UserSubmitted email) = void $ DB.insertBy $
         EmailRegistration uuid email False
@@ -60,4 +61,3 @@ handleUserStateReadModelEvents pool events = DB.runSqlPool updates pool
     mutate _ _ = return ()
     decomposeEvent e = let e' = streamEventEvent e in
         (streamEventKey e', streamEventEvent e')
-    updates = mapM_ (uncurry mutate . decomposeEvent) events
