@@ -6,7 +6,7 @@ module Registration
   ( condenseConsecutive
   , EmailAddress
   , EmailType(..)
-  , UserEvent(Emailed)
+  , UserEvent(..)
   , TimeStamped
   , VerificationState(..), verificationTimeout
   , UserState, usEmailAddress, usPendingEmails, usVerificationState,

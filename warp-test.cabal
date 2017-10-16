@@ -42,6 +42,7 @@ library
                      , persistent-database-url
                      , persistent-postgresql
                      , persistent-template
+                     , resource-pool
                      , stm
                      , time
                      , text
