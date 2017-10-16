@@ -4,8 +4,7 @@ module Lib where
 
 import NeatInterpolation (text)
 
-import Control.Applicative
-import Control.Monad (join, mfilter)
+import Control.Monad (join)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.UTF8 as LUTF8
@@ -16,15 +15,13 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Text.Format (format)
-import Data.Text.Lazy (toStrict, fromStrict)
+import Data.Text.Lazy (toStrict)
 import qualified Data.URLEncoded as UrlE
 import qualified Data.UUID as UUID
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
 import qualified Text.Email.Validate as Email
 
-import Router (Endpoint, dispatch, getEp, postEp, childEp, childEps)
-import Middleware (forceTls, prettifyError)
 import Registration (
   Store, sPoll, Actor, aSubmitEmailAddress, aVerify, aUnsubscribe,
   usEmailAddress)
