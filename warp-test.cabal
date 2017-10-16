@@ -19,6 +19,7 @@ library
   exposed-modules:     Lib
                      , Mailer
                      , Middleware
+                     , ReadView
                      , Registration
                      , Router
   build-depends:       base >= 4.7 && < 5
@@ -40,6 +41,7 @@ library
                      , HaskellNet-SSL
                      , persistent-database-url
                      , persistent-postgresql
+                     , persistent-template
                      , stm
                      , time
                      , text
