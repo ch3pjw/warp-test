@@ -20,13 +20,14 @@ import Control.Monad.Reader (ReaderT)
 import Data.Pool (Pool)
 import Data.Text (Text)
 import Data.UUID (UUID)
-import Database.Persist.Postgresql ((=.), (+=.), (==.))
+import Database.Persist.Postgresql ((=.), (==.))
 import qualified Database.Persist.Postgresql as DB
 import Database.Persist.TH (
     share, mkPersist, sqlSettings, mkMigrate, persistLowerCase)
 import Eventful (
     SequenceNumber(..), GlobalStreamEvent,
-    getEvents, eventsStartingAt, streamEventEvent, streamEventKey)
+    getEvents, eventsStartingAt, streamEventEvent, streamEventKey,
+    streamEventPosition)
 import Eventful.Store.Postgresql (serializedGlobalEventStoreReader)
 import Eventful.Store.Sql (jsonStringSerializer, defaultSqlEventStoreConfig, sqlGlobalEventStoreReader)
 
@@ -70,9 +71,7 @@ handleUserStateReadModelEvents
   :: [GlobalStreamEvent (TimeStamped UserEvent)] -> ReaderT DB.SqlBackend IO ()
 handleUserStateReadModelEvents events = do
     mapM_ (uncurry mutate . decomposeEvent) events
-    DB.updateWhere
-      [ViewSequenceNumberName ==. erTableName]
-      [ViewSequenceNumberLatestApplied +=. SequenceNumber (length events)]
+    updateSN events
   where
     mutate uuid (_, UserSubmitted email) = void $ DB.insertBy $
         EmailRegistration uuid email False
@@ -83,6 +82,11 @@ handleUserStateReadModelEvents events = do
     mutate _ _ = return ()
     decomposeEvent e = let e' = streamEventEvent e in
         (streamEventKey e', streamEventEvent e')
+    updateSN [] = return ()
+    updateSN es = let latestSN = streamEventPosition $ last es in
+        DB.updateWhere
+          [ViewSequenceNumberName ==. erTableName]
+          [ViewSequenceNumberLatestApplied =. latestSN]
 
 
 initialiseUserStateView :: ReaderT DB.SqlBackend IO ()
