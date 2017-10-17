@@ -48,11 +48,11 @@ main = do
     o2 <- sGetNotificationChan store
     let actor = newActor salt getCurrentTime
 
-    let authMiddlware = buildAuth username password
+    let authMiddleware = buildAuth username password
     let icp = interestedCollectionPost actor store
     let ir = interestedResource actor store
     let ig = interestedCollectionGet pool
-    let app = prettifyError $ dispatch $ root icp ir ig authMiddlware
+    let app = prettifyError $ dispatch $ root icp ir ig authMiddleware
 
     withAsync (viewWorker pool (U.readChan o2)) $ \viewWorkerAsync -> do
         link viewWorkerAsync
