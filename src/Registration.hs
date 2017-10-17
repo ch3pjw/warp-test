@@ -18,12 +18,14 @@ module Registration
   , reactivelyRunAction
   , timeStampedAction
   , getDatabaseConfig
+  , untilNothing
   ) where
 
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.STM (atomically)
 import Control.Exception (catch, SomeException)
 import Control.Monad
+import Control.Monad.IO.Class
 import Control.Monad.Logger (runNoLoggingT)
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Aeson.TH (deriveJSON)
@@ -263,15 +265,17 @@ hashEmail salt email =
 getAndShowState :: Store -> UUID -> IO ()
 getAndShowState s = sPoll s >=> print
 
+untilNothing :: (MonadIO m) => IO (Maybe a) -> (a -> m ()) -> m ()
+untilNothing wait f =
+    liftIO wait >>=
+    maybe (return ()) (\a -> f a >> untilNothing wait f)
 
 reactivelyRunAction ::
     Action (TimeStamped UserEvent) -> Store -> IO (Maybe UUID) -> IO ()
-reactivelyRunAction a store waitUuid =
-    waitUuid >>= maybe (return ()) (
-        -- We catch any exception the action raises because it shouldn't be able
-        -- to bring down the entire reaction loop:
-        \u -> (updateStore a store u `catch` (\(_ :: SomeException) -> return ()))
-            >> reactivelyRunAction a store waitUuid)
+reactivelyRunAction a store waitUuid = untilNothing waitUuid (
+    -- We catch any exception the action raises because it shouldn't be able
+    -- to bring down the entire reaction loop:
+    \u -> updateStore a store u `catch` (\(_ :: SomeException) -> return ()))
 
 
 getDatabaseConfig :: IO DB.PostgresConf
