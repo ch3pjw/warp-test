@@ -13,18 +13,18 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader (ReaderT)
 import Data.Pool (Pool)
 import Data.Text (Text)
-import Data.UUID (UUID, nil)
+import Data.UUID (UUID)
 import Database.Persist.Postgresql ((=.), (+=.), (==.))
 import qualified Database.Persist.Postgresql as DB
 import Database.Persist.TH (
     share, mkPersist, sqlSettings, mkMigrate, persistLowerCase)
 import Eventful (
-    SequenceNumber(..), GlobalStreamEvent, GlobalEventStoreReader,
+    SequenceNumber(..), GlobalStreamEvent,
     getEvents, eventsStartingAt, streamEventEvent, streamEventKey)
 import Eventful.Store.Postgresql (serializedGlobalEventStoreReader)
 import Eventful.Store.Sql (jsonStringSerializer, defaultSqlEventStoreConfig, sqlGlobalEventStoreReader)
 
-import Registration (EmailAddress, EmailType, UserEvent(..), TimeStamped)
+import Registration (EmailAddress, UserEvent(..), TimeStamped)
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
