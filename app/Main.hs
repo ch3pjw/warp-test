@@ -5,6 +5,7 @@ module Main where
 import Control.Concurrent.Async
 import Control.Applicative
 import qualified Control.Concurrent.Chan.Unagi as U
+import Control.Monad.Logger (runNoLoggingT)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.UTF8 as UTF8
 import Data.DateTime (getCurrentTime)
@@ -13,12 +14,14 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
+import qualified Database.Persist.Postgresql as DB
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
 import Network.Wai.Middleware.HttpAuth (basicAuth)
 import System.Environment (getEnv, lookupEnv)
 
 import Registration
+import ReadView
 import Mailer
 import Lib
 import Router
@@ -39,20 +42,25 @@ main = do
     dbConfig <- getDatabaseConfig
 
     -- Do a bunch of initialisation:
-    store <- newDBStore dbConfig
-    o <- sGetNotificationChan store
+    pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr dbConfig) 2)
+    store <- newDBStore pool
+    o1 <- sGetNotificationChan store
+    o2 <- sGetNotificationChan store
     let actor = newActor salt getCurrentTime
 
-    let authMiddlware = buildAuth username password
+    let authMiddleware = buildAuth username password
     let icp = interestedCollectionPost actor store
     let ir = interestedResource actor store
-    let app = prettifyError $ dispatch $ root icp ir authMiddlware
+    let ig = interestedCollectionGet pool
+    let app = prettifyError $ dispatch $ root icp ir ig authMiddleware
 
-    withAsync (mailer ms store (U.readChan o)) $ \a -> do
-        link a
-        if allowInsecure
-        then Warp.run port app
-        else Warp.run port $ forceTls app
+    withAsync (viewWorker pool (U.readChan o2)) $ \viewWorkerAsync -> do
+        link viewWorkerAsync
+        withAsync (mailer ms store (U.readChan o1)) $ \mailerAsync -> do
+            link mailerAsync
+            if allowInsecure
+            then Warp.run port app
+            else Warp.run port $ forceTls app
 
 
 formatVLink :: Text -> UUID -> Text
@@ -77,17 +85,16 @@ buildAuth username password = basicAuth isAllowed "Concert API"
       | otherwise = pure False
 
 
-root ::
-  Wai.Application -> (Text -> Wai.Application) -> Wai.Middleware -> Endpoint
-root icp ir authMiddleware =
+root
+  :: Wai.Application -> (Text -> Wai.Application) -> Wai.Application
+  -> Wai.Middleware -> Endpoint
+root icp ir ig authMiddleware =
   getEp (redir "interested") <|>
   childEps
     [ ("david", getEp $ githubRedir "foolswood")
     , ("paul", getEp $ githubRedir "ch3pjw")
     , ("api", authMiddleware <$> childEps
-        [("interested",
-          getEp interestedCollectionGet
-         )]
+        [("interested", getEp ig)]
       )
     , ("interested"
       , getEp interestedSubmissionGet <|>

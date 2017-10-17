@@ -19,6 +19,7 @@ library
   exposed-modules:     Lib
                      , Mailer
                      , Middleware
+                     , ReadView
                      , Registration
                      , Router
   build-depends:       base >= 4.7 && < 5
@@ -35,11 +36,13 @@ library
                      , eventful-sql-common
                      , http-types
                      , mime-mail
-                     , monad-logger
+                     , mtl
                      , neat-interpolation
                      , HaskellNet-SSL
                      , persistent-database-url
                      , persistent-postgresql
+                     , persistent-template
+                     , resource-pool
                      , stm
                      , time
                      , text
@@ -61,6 +64,8 @@ executable warp-test-exe
                      , async
                      , bytestring
                      , datetime
+                     , monad-logger
+                     , persistent-postgresql
                      , text
                      , unagi-chan
                      , utf8-string

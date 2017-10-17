@@ -102,9 +102,9 @@ confirmationEmail from to unsubscribeLink =
     body = format
       (  "Hi,\n\n"
       <> "You've already registered your interest in Concert. We'll let you "
-      <> "know when we've got news about our software or we need volunteers to"
+      <> "know when we've got news about our software or we need volunteers to "
       <> "beta test our latest release.\n\n"
-      <> "Thanks!\nThe Concert Team"
+      <> "Thanks!\nThe Concert Team\n\n"
       <> "If you don't want to hear from us any more, you can use the "
       <> "following link to unsubscribe at any time:\n\n{}\n\n")
       [unsubscribeLink]

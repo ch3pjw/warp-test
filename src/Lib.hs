@@ -4,30 +4,35 @@ module Lib where
 
 import NeatInterpolation (text)
 
-import Control.Applicative
-import Control.Monad (join, mfilter)
+import Control.Monad (join)
+import qualified Data.Aeson as JSON
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.UTF8 as LUTF8
 import qualified Data.ByteString.UTF8 as UTF8
 import Data.Monoid
+import Data.Pool (Pool)
 import Data.String (fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Text.Format (format)
-import Data.Text.Lazy (toStrict, fromStrict)
+import Data.Text.Lazy (toStrict)
 import qualified Data.URLEncoded as UrlE
 import qualified Data.UUID as UUID
+import qualified Database.Persist.Postgresql as DB
+import Database.Persist.Postgresql ((==.))
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
 import qualified Text.Email.Validate as Email
 
-import Router (Endpoint, dispatch, getEp, postEp, childEp, childEps)
-import Middleware (forceTls, prettifyError)
 import Registration (
-  Store, sPoll, Actor, aSubmitEmailAddress, aVerify, aUnsubscribe,
-  usEmailAddress)
+    Store, sPoll, Actor, aSubmitEmailAddress, aVerify, aUnsubscribe,
+    usEmailAddress)
+import ReadView (
+    emailRegistrationEmailAddress,
+    EntityField(EmailRegistrationId, EmailRegistrationVerified))
+
 
 -- Redirect sub-application
 
@@ -62,6 +67,12 @@ htmlResponse html _ sendResponse = sendResponse $ Wai.responseLBS
     HTTP.status200
     [(HTTP.hContentType, "text/html; charset=utf-8")]
     (LBS.fromStrict $ encodeUtf8 html)
+
+jsonResponse :: (JSON.ToJSON a) => a -> Wai.Application
+jsonResponse a _ sendResponse = sendResponse $ Wai.responseLBS
+    HTTP.status200
+    [(HTTP.hContentType, "application/json")]
+    (JSON.encode a)
 
 interestedSubmissionGet :: Wai.Application
 interestedSubmissionGet = htmlResponse [text|
@@ -103,8 +114,16 @@ interestedCollectionPost actor store req sendResponse = do
 
 
 -- | This is used by us to get all the email addresses out
-interestedCollectionGet :: Wai.Application
-interestedCollectionGet = textResponse "interested collection get"
+interestedCollectionGet :: Pool DB.SqlBackend -> Wai.Application
+interestedCollectionGet pool req sendResponse = do
+  entities <- DB.runSqlPool
+      (DB.selectList
+         [EmailRegistrationVerified ==. True]
+         [DB.Asc EmailRegistrationId])
+      pool
+  jsonResponse
+    (emailRegistrationEmailAddress . DB.entityVal <$> entities)
+    req sendResponse
 
 
 submissionResponse :: Text -> Wai.Application

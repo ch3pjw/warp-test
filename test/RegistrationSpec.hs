@@ -38,6 +38,17 @@ spec = do
     it "should convert neighbouring duplicates into a single item" $
       condenseConsecutive [1, 1, 2, 3, 3, 3, 4] `shouldBe` [1, 2, 3, 4]
 
+  describe "untilNothing" $ do
+    it "should execute actions until its wait function returns Nothing" $ do
+      (i, o) <- U.newChan
+      m <- newMVar []
+      mapM_ (U.writeChan i . Just) ("hello" :: [Char])
+      U.writeChan i Nothing
+      untilNothing (U.readChan o) (\c -> modifyMVar_ m (return . (c:)))
+      result <- takeMVar m
+      result `shouldBe` "olleh"
+
+
   around testContext $ do
     describe "the subscription handler" $ do
       context "when the email service is running" $ do
@@ -177,7 +188,6 @@ testContext spec = do
   let actor = newActor "NaCl" $ clockGetTime clock
   a <- async $ reactivelyRunAction
       (tsMockSendEmails (aGetTime actor) ei) store (U.readChan uo')
-  -- FIXME: want better shutdown than cancel:
   link a
   bracket
     (return (clock, actor, store, uo, eo))

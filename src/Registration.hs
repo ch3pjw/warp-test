@@ -6,7 +6,7 @@ module Registration
   ( condenseConsecutive
   , EmailAddress
   , EmailType(..)
-  , UserEvent(Emailed)
+  , UserEvent(..)
   , TimeStamped
   , VerificationState(..), verificationTimeout
   , UserState, usEmailAddress, usPendingEmails, usVerificationState,
@@ -18,19 +18,21 @@ module Registration
   , reactivelyRunAction
   , timeStampedAction
   , getDatabaseConfig
+  , untilNothing
   ) where
 
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.STM (atomically)
 import Control.Exception (catch, SomeException)
 import Control.Monad
-import Control.Monad.Logger (runNoLoggingT)
+import Control.Monad.IO.Class
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Aeson.TH (deriveJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
 import qualified Data.ByteString as BS
 import Data.DateTime (DateTime)
 import Data.Monoid
+import Data.Pool (Pool)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -69,7 +71,7 @@ verificationTimeout =
 data EmailType
   = VerificationEmail
   | ConfirmationEmail  -- Having clicked submit whilst verified
-  deriving (Eq, Show)
+  deriving (Eq, Show, Read)
 
 data VerificationState
   = Unverified
@@ -261,15 +263,17 @@ hashEmail salt email =
 getAndShowState :: Store -> UUID -> IO ()
 getAndShowState s = sPoll s >=> print
 
+untilNothing :: (MonadIO m) => IO (Maybe a) -> (a -> m ()) -> m ()
+untilNothing wait f =
+    liftIO wait >>=
+    maybe (return ()) (\a -> f a >> untilNothing wait f)
 
 reactivelyRunAction ::
     Action (TimeStamped UserEvent) -> Store -> IO (Maybe UUID) -> IO ()
-reactivelyRunAction a store waitUuid =
-    waitUuid >>= maybe (return ()) (
-        -- We catch any exception the action raises because it shouldn't be able
-        -- to bring down the entire reaction loop:
-        \u -> (updateStore a store u `catch` (\(_ :: SomeException) -> return ()))
-            >> reactivelyRunAction a store waitUuid)
+reactivelyRunAction a store waitUuid = untilNothing waitUuid (
+    -- We catch any exception the action raises because it shouldn't be able
+    -- to bring down the entire reaction loop:
+    \u -> updateStore a store u `catch` (\(_ :: SomeException) -> return ()))
 
 
 getDatabaseConfig :: IO DB.PostgresConf
@@ -281,15 +285,14 @@ deriveJSON (aesonPrefix camelCase) ''VerificationState
 deriveJSON (aesonPrefix camelCase) ''UserEvent
 
 
-newDBStore :: DB.PostgresConf -> IO Store
-newDBStore config =
+newDBStore :: Pool DB.SqlBackend -> IO Store
+newDBStore pool =
   let
     writer = serializedEventStoreWriter jsonStringSerializer $
         postgresqlEventStoreWriter defaultSqlEventStoreConfig
     reader = serializedVersionedEventStoreReader jsonStringSerializer $
         sqlEventStoreReader defaultSqlEventStoreConfig
   in do
-    pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr config) 1)
     initializePostgresqlEventStore pool
     newStoreFrom
       (\uuid events -> void $
