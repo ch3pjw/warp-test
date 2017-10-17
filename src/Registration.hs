@@ -26,13 +26,13 @@ import Control.Concurrent.STM (atomically)
 import Control.Exception (catch, SomeException)
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Logger (runNoLoggingT)
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Aeson.TH (deriveJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
 import qualified Data.ByteString as BS
 import Data.DateTime (DateTime)
 import Data.Monoid
+import Data.Pool (Pool)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -287,15 +287,14 @@ deriveJSON (aesonPrefix camelCase) ''VerificationState
 deriveJSON (aesonPrefix camelCase) ''UserEvent
 
 
-newDBStore :: DB.PostgresConf -> IO Store
-newDBStore config =
+newDBStore :: Pool DB.SqlBackend -> IO Store
+newDBStore pool =
   let
     writer = serializedEventStoreWriter jsonStringSerializer $
         postgresqlEventStoreWriter defaultSqlEventStoreConfig
     reader = serializedVersionedEventStoreReader jsonStringSerializer $
         sqlEventStoreReader defaultSqlEventStoreConfig
   in do
-    pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr config) 1)
     initializePostgresqlEventStore pool
     newStoreFrom
       (\uuid events -> void $

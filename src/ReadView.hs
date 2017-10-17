@@ -24,7 +24,7 @@ import Eventful (
 import Eventful.Store.Postgresql (serializedGlobalEventStoreReader)
 import Eventful.Store.Sql (jsonStringSerializer, defaultSqlEventStoreConfig, sqlGlobalEventStoreReader)
 
-import Registration (EmailAddress, UserEvent(..), TimeStamped)
+import Registration (EmailAddress, UserEvent(..), TimeStamped, untilNothing)
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
@@ -95,3 +95,11 @@ updateUserStateView :: ReaderT DB.SqlBackend IO ()
 updateUserStateView =
       getOrInitSequenceNumber erTableName >>=
       latestEvents >>= handleUserStateReadModelEvents
+
+
+viewWorker :: Pool DB.SqlBackend -> (IO (Maybe a)) -> IO ()
+viewWorker pool wait = DB.runSqlPool i pool >> f
+  where
+    f = untilNothing wait (const $ DB.runSqlPool updateUserStateView pool)
+    i = DB.runMigration migrateAll >> initialiseUserStateView
+        >> updateUserStateView
