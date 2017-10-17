@@ -12,13 +12,14 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader (ReaderT)
 import Data.Pool (Pool)
+import Data.Text (Text)
 import Data.UUID (UUID, nil)
-import Database.Persist.Postgresql ((=.), (==.))
+import Database.Persist.Postgresql ((=.), (+=.), (==.))
 import qualified Database.Persist.Postgresql as DB
 import Database.Persist.TH (
     share, mkPersist, sqlSettings, mkMigrate, persistLowerCase)
 import Eventful (
-    SequenceNumber, GlobalStreamEvent, GlobalEventStoreReader,
+    SequenceNumber(..), GlobalStreamEvent, GlobalEventStoreReader,
     getEvents, eventsStartingAt, streamEventEvent, streamEventKey)
 import Eventful.Store.Postgresql (serializedGlobalEventStoreReader)
 import Eventful.Store.Sql (jsonStringSerializer, defaultSqlEventStoreConfig, sqlGlobalEventStoreReader)
@@ -34,7 +35,18 @@ EmailRegistration
     UniqueEmailAddress emailAddress
     UniqueUuid uuid
     deriving Show
+
+ViewSequenceNumber
+    name Text
+    latestApplied SequenceNumber
+    UniqueName name
+    deriving Show
 |]
+
+-- FIXME: this constant needs to line up with what the template stuff above
+-- produces, and is _not_ checked :-/
+erTableName :: Text
+erTableName = "email_registration"
 
 
 latestEvents
@@ -50,7 +62,11 @@ latestEvents latestHandled =
 
 handleUserStateReadModelEvents
   :: [GlobalStreamEvent (TimeStamped UserEvent)] -> ReaderT DB.SqlBackend IO ()
-handleUserStateReadModelEvents = mapM_ (uncurry mutate . decomposeEvent)
+handleUserStateReadModelEvents events = do
+    mapM_ (uncurry mutate . decomposeEvent) events
+    DB.updateWhere
+      [ViewSequenceNumberName ==. erTableName]
+      [ViewSequenceNumberLatestApplied +=. SequenceNumber (length events)]
   where
     mutate uuid (_, UserSubmitted email) = void $ DB.insertBy $
         EmailRegistration uuid email False
@@ -61,3 +77,21 @@ handleUserStateReadModelEvents = mapM_ (uncurry mutate . decomposeEvent)
     mutate _ _ = return ()
     decomposeEvent e = let e' = streamEventEvent e in
         (streamEventKey e', streamEventEvent e')
+
+
+initialiseUserStateView :: ReaderT DB.SqlBackend IO ()
+initialiseUserStateView = DB.runMigration migrateAll >> void (
+    getOrInitSequenceNumber erTableName)
+
+getOrInitSequenceNumber :: Text -> ReaderT DB.SqlBackend IO SequenceNumber
+getOrInitSequenceNumber tableName = do
+    eVsn <- DB.insertBy $ ViewSequenceNumber tableName 0
+    return $ either (getN . DB.entityVal) (const 0) eVsn
+  where
+    getN (ViewSequenceNumber _ n) = n
+
+
+updateUserStateView :: ReaderT DB.SqlBackend IO ()
+updateUserStateView =
+      getOrInitSequenceNumber erTableName >>=
+      latestEvents >>= handleUserStateReadModelEvents
