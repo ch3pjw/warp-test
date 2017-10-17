@@ -51,7 +51,8 @@ main = do
     let authMiddlware = buildAuth username password
     let icp = interestedCollectionPost actor store
     let ir = interestedResource actor store
-    let app = prettifyError $ dispatch $ root icp ir authMiddlware
+    let ig = interestedCollectionGet pool
+    let app = prettifyError $ dispatch $ root icp ir ig authMiddlware
 
     withAsync (viewWorker pool (U.readChan o2)) $ \viewWorkerAsync -> do
         link viewWorkerAsync
@@ -84,17 +85,16 @@ buildAuth username password = basicAuth isAllowed "Concert API"
       | otherwise = pure False
 
 
-root ::
-  Wai.Application -> (Text -> Wai.Application) -> Wai.Middleware -> Endpoint
-root icp ir authMiddleware =
+root
+  :: Wai.Application -> (Text -> Wai.Application) -> Wai.Application
+  -> Wai.Middleware -> Endpoint
+root icp ir ig authMiddleware =
   getEp (redir "interested") <|>
   childEps
     [ ("david", getEp $ githubRedir "foolswood")
     , ("paul", getEp $ githubRedir "ch3pjw")
     , ("api", authMiddleware <$> childEps
-        [("interested",
-          getEp interestedCollectionGet
-         )]
+        [("interested", getEp ig)]
       )
     , ("interested"
       , getEp interestedSubmissionGet <|>

@@ -6,7 +6,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module ReadView where
+module ReadView
+  ( DB.EntityField(..)
+  , EmailRegistrationId
+  , emailRegistrationEmailAddress
+  , ViewSequenceNumberId
+  , viewWorker
+  ) where
 
 import Control.Monad
 import Control.Monad.IO.Class
