@@ -43,7 +43,6 @@ import System.Environment (getEnv)
 
 import Database.Persist.URL (fromDatabaseUrl)
 import qualified Database.Persist.Postgresql as DB
-import Database.Persist.TH (derivePersistField)
 
 import Eventful (
   Projection(..), CommandHandler(..), StreamProjection, EventVersion,
@@ -73,7 +72,6 @@ data EmailType
   = VerificationEmail
   | ConfirmationEmail  -- Having clicked submit whilst verified
   deriving (Eq, Show, Read)
-derivePersistField "EmailType"
 
 data VerificationState
   = Unverified
