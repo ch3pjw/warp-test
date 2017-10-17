@@ -5,6 +5,7 @@ module Lib where
 import NeatInterpolation (text)
 
 import Control.Monad (join)
+import qualified Data.Aeson as JSON
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.UTF8 as LUTF8
@@ -59,6 +60,12 @@ htmlResponse html _ sendResponse = sendResponse $ Wai.responseLBS
     HTTP.status200
     [(HTTP.hContentType, "text/html; charset=utf-8")]
     (LBS.fromStrict $ encodeUtf8 html)
+
+jsonResponse :: (JSON.ToJSON a) => a -> Wai.Application
+jsonResponse a _ sendResponse = sendResponse $ Wai.responseLBS
+    HTTP.status200
+    [(HTTP.hContentType, "application/json")]
+    (JSON.encode a)
 
 interestedSubmissionGet :: Wai.Application
 interestedSubmissionGet = htmlResponse [text|
