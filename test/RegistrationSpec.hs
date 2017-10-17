@@ -188,7 +188,6 @@ testContext spec = do
   let actor = newActor "NaCl" $ clockGetTime clock
   a <- async $ reactivelyRunAction
       (tsMockSendEmails (aGetTime actor) ei) store (U.readChan uo')
-  -- FIXME: want better shutdown than cancel:
   link a
   bracket
     (return (clock, actor, store, uo, eo))
