@@ -22,10 +22,13 @@ library
                      , ReadView
                      , Registration
                      , Router
+                     , Templates
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , aeson-casing
                      , async
+                     , blaze-html
+                     , blaze-markup
                      , bytestring
                      , cryptohash
                      , datetime

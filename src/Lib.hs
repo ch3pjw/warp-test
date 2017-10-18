@@ -2,8 +2,6 @@
 
 module Lib where
 
-import NeatInterpolation (text)
-
 import Control.Monad (join)
 import qualified Data.Aeson as JSON
 import qualified Data.ByteString as BS
@@ -12,18 +10,17 @@ import qualified Data.ByteString.Lazy.UTF8 as LUTF8
 import qualified Data.ByteString.UTF8 as UTF8
 import Data.Monoid
 import Data.Pool (Pool)
-import Data.String (fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import Data.Text.Format (format)
-import Data.Text.Lazy (toStrict)
+import Data.Text.Encoding (decodeUtf8)
 import qualified Data.URLEncoded as UrlE
 import qualified Data.UUID as UUID
 import qualified Database.Persist.Postgresql as DB
 import Database.Persist.Postgresql ((==.))
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
+import Text.Blaze.Html5 (Html)
+import Text.Blaze.Html.Renderer.Utf8 (renderHtml)
 import qualified Text.Email.Validate as Email
 
 import Registration (
@@ -32,6 +29,7 @@ import Registration (
 import ReadView (
     emailRegistrationEmailAddress,
     EntityField(EmailRegistrationId, EmailRegistrationVerified))
+import qualified Templates
 
 
 -- Redirect sub-application
@@ -62,11 +60,11 @@ textResponse' status body _ sendResponse = sendResponse $
 textResponse :: LBS.ByteString -> Wai.Application
 textResponse = textResponse' HTTP.status200
 
-htmlResponse :: Text -> Wai.Application
+htmlResponse :: Html -> Wai.Application
 htmlResponse html _ sendResponse = sendResponse $ Wai.responseLBS
     HTTP.status200
     [(HTTP.hContentType, "text/html; charset=utf-8")]
-    (LBS.fromStrict $ encodeUtf8 html)
+    (renderHtml html)
 
 jsonResponse :: (JSON.ToJSON a) => a -> Wai.Application
 jsonResponse a _ sendResponse = sendResponse $ Wai.responseLBS
@@ -75,20 +73,7 @@ jsonResponse a _ sendResponse = sendResponse $ Wai.responseLBS
     (JSON.encode a)
 
 interestedSubmissionGet :: Wai.Application
-interestedSubmissionGet = htmlResponse [text|
-  <html>
-    <head>
-      <title>Register Interest - Concert</title>
-    </head>
-    <body>
-      <form method="post">
-        Email address:<br/>
-        <input type="text" name="email" /><br/>
-        <input type="submit" value="Go!"/>
-      </form>
-    </body>
-  </html>
-|]
+interestedSubmissionGet = htmlResponse Templates.emailSubmission
 
 
 -- | This is posted by the web form
@@ -127,49 +112,16 @@ interestedCollectionGet pool req sendResponse = do
 
 
 submissionResponse :: Text -> Wai.Application
-submissionResponse email = htmlResponse (toStrict $ format f [email])
-  where
-    f = fromString $ Text.unpack [text|
-      <html>
-        <head>
-          <title>Concert</title>
-        </head>
-        <body>
-          <h1>Concert</h1>
-          <p>We sent a verification link to {}. Please check your inbox.</p>
-        </body>
-      </html>|]
+submissionResponse email = htmlResponse $
+  Templates.emailSubmissionConfirmation email
 
 
 unsubscriptionResponse :: Wai.Application
-unsubscriptionResponse = htmlResponse [text|
-  <html>
-    <head>
-      <title>Concert</title>
-    </head>
-    <body>
-      <h1>Concert</h1>
-      <p>We've removed your email address from our list. Sorry to see you go.
-      </p>
-    </body>
-  </html>
-|]
+unsubscriptionResponse = htmlResponse Templates.emailUnsubscriptionConfirmation
 
 
 verificationResponse :: Wai.Application
-verificationResponse = htmlResponse [text|
-  <html>
-    <head>
-      <title>Concert</title>
-    </head>
-    <body>
-      <h1>Concert</h1>
-      <p>Thanks! We'll email you when we've got news about our software or when
-      we need people for beta testing.
-      </p>
-    </body>
-  </html>
-|]
+verificationResponse = htmlResponse Templates.emailVerificationConfirmation
 
 
 -- | This sets the users email to verified when they visit
