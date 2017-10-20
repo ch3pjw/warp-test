@@ -10,24 +10,22 @@ import qualified Clay.Flexbox as Fb
 import Clay.Media (screen)
 import qualified Clay.Media as M
 
-z :: Size LengthUnit
-z = (px 0)
 
 mainLayout :: Css
 mainLayout = do
     body ? do
       display flex
       flexFlow Fb.column Fb.nowrap
-      margin' z
+      margin' nil
       height $ pct 100
 
     body |> star |> C.div ? do
       maxWidth $ px 820
       margin' auto
-      padding'' z (px 10)
+      padding'' nil (px 10)
 
     "#header-wrapper" ? do
-      boxShadow z (px 5) (px 15) shadowGrey
+      boxShadow nil (px 5) (px 15) shadowGrey
 
     "#header" ? do
       display flex
@@ -105,7 +103,7 @@ mainStyling = do
       color recordRed
 
     inputField <> submitButton ? do
-      margin'' (px 5) z
+      margin'' (px 5) nil
       padding' $ px 10
       minWidth $ px 200
       borderRadius' $ px 5
@@ -126,11 +124,11 @@ mainStyling = do
       paddingBottom $ px 9 -- Whatever it was -1
       -- background none
       backgroundColor goGreenH
-      insetBoxShadow solid z z (px 5) "#777777"
+      insetBoxShadow solid nil nil (px 5) "#777777"
 
     "#footer-wrapper" ? do
       backgroundColor $ grayish 238
-      boxShadow z z (px 15) $ grayish 204
+      boxShadow nil nil (px 15) $ grayish 204
 
     "#footer" ? do
       color $ grayish 119
