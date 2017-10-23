@@ -48,6 +48,12 @@ mainLayout = do
       display grid
 
     query screen [M.maxWidth (px $ deviceSizeBoundaryPx - 1)] $ do
+      body ? do
+        fontSize $ pct 120
+
+      input ? do
+        fontSize $ pct 90
+
       idRef "content" ? do
         "grid-template-columns" -: "auto"
         "grid-row-gap" -: "20 px"
