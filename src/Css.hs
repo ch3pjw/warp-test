@@ -47,12 +47,12 @@ mainLayout = do
     idRef "content" ? do
       display grid
 
-    query screen [M.maxWidth $ deviceSizeBoundary - (px 1)] $
+    query screen [M.maxWidth (px $ deviceSizeBoundaryPx - 1)] $ do
       idRef "content" ? do
         "grid-template-columns" -: "auto"
         "grid-column-gap" -: "20 px"
 
-    query screen [M.minWidth deviceSizeBoundary] $
+    query screen [M.minWidth $ px deviceSizeBoundaryPx] $ do
       idRef "content" ? do
         "grid-template-columns" -: "60% 40%"
         "grid-column-gap" -: "50 px"
@@ -84,7 +84,7 @@ mainLayout = do
 
   where
     shadowGrey = grayish 204
-    deviceSizeBoundary = (px 600)
+    deviceSizeBoundaryPx = 600
 
 
 mainStyling :: Css
