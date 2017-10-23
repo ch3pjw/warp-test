@@ -3,6 +3,7 @@
 module Css where
 
 import Data.Monoid
+import Data.Text (Text)
 
 import Clay
 import qualified Clay as C
@@ -10,6 +11,8 @@ import qualified Clay.Flexbox as Fb
 import Clay.Media (screen)
 import qualified Clay.Media as M
 
+import Clay.Selector (
+  SelectorF(..), Refinement(..), Predicate(Id), Path(Star), Fix(In))
 
 mainLayout :: Css
 mainLayout = do
@@ -24,47 +27,51 @@ mainLayout = do
       margin' auto
       padding'' nil (px 10)
 
-    "#header-wrapper" ? do
+    idRef "header-wrapper" ? do
       boxShadow nil (px 5) (px 15) shadowGrey
 
-    "#header" ? do
+    idRef "header" ? do
       display flex
       justifyContent spaceBetween
       alignItems center
       vMargin $ px 10
 
-    "#content" ? do
+    idRef "content" ? do
       display grid
 
     query screen [M.maxWidth $ deviceSizeBoundary - (px 1)] $
-      "#content" ? do
+      idRef "content" ? do
         "grid-template-columns" -: "auto"
         "grid-column-gap" -: "20 px"
 
     query screen [M.minWidth deviceSizeBoundary] $
-      "content" ? do
+      idRef "content" ? do
         "grid-template-columns" -: "60% 40%"
         "grid-column-gap" -: "50 px"
         padding' $ px 75
 
-    "#registration-form" ? do
+    idRef "registration-form" ? do
       alignSelf center
 
     form ? do
       display flex
       flexFlow Fb.column Fb.nowrap
 
-    "#footer-wrapper" ? do
+    idRef "footer-wrapper" ? do
       Fb.flex 1 0 auto
 
-    "#footer" ? do
+    idRef "footer" ? do
       display flex
+      flexFlow Fb.row Fb.wrap
       justifyContent spaceBetween
       paddingTop $ px 20
       paddingBottom $ px 20
 
-    "#links" |> star ? do
+    idRef "links" |> star ? do
       marginLeft $ px 10
+
+    idRef "links" |> star # firstOfType ? do
+      marginLeft nil
 
 
   where
@@ -94,12 +101,12 @@ mainStyling = do
     a # href # hover ? do
       color recordRed
 
-    "#header" ? a ? do
+    idRef "header" ? a ? do
       textDecoration none
       color inherit
       fontWeight $ weight 500
 
-    "#header" ? a # hover ? do
+    idRef "header" ? a # hover ? do
       color recordRed
 
     inputField <> submitButton ? do
@@ -126,19 +133,19 @@ mainStyling = do
       backgroundColor goGreenH
       insetBoxShadow solid nil nil (px 5) "#777777"
 
-    "#footer-wrapper" ? do
+    idRef "footer-wrapper" ? do
       backgroundColor $ grayish 238
       boxShadow nil nil (px 15) $ grayish 204
 
-    "#footer" ? do
+    idRef "footer" ? do
       color $ grayish 119
       fontWeight $ weight 300
 
-    "#footer" ? a ? do
+    idRef "footer" ? a ? do
       textDecoration none
       color inherit
 
-    "#footer" ? a # hover ? do
+    idRef "footer" ? a # hover ? do
       color recordRed
   where
     offBlack = hsl 300 22 10
@@ -172,3 +179,9 @@ borderRadius' x = borderRadius x x x x
 
 borderRadius'' :: Size a -> Size a -> Css
 borderRadius'' y x = borderRadius y x y x
+-- | The IsString-inferred way of specifying ID selectors is error prone (one
+--   can type "foo" instead of "#foo" all too easily. The `byId` function from
+--   Clay only prevides a Refinement, not a Selector. So, we implement our own
+--   ID Selector by borrowing from Clay's internals.
+idRef :: Text -> Selector
+idRef identifier = In $ SelectorF (Refinement [Id identifier]) Star
