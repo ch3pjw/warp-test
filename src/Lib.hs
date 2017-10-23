@@ -159,4 +159,4 @@ interestedResource actor store name req sendResponse =
 
 
 screenCss :: Wai.Application
-screenCss = cssResponse $ mainLayout >> mainStyling
+screenCss = cssResponse . flattenResponsive 600 $ mainLayout <> mainStyling

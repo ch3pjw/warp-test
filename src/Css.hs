@@ -14,8 +14,37 @@ import Clay.Stylesheet (key)
 import Clay.Selector (
   SelectorF(..), Refinement(..), Predicate(Id), Path(Star), Fix(In))
 
-mainLayout :: Css
-mainLayout = do
+data ResponsiveCss = ResponsiveCss
+  { rcGlobalCss :: Css
+  , rcPhoneCss :: Css
+  , rcLargeCss :: Css
+  }
+
+globalCss :: Css -> ResponsiveCss
+globalCss css = ResponsiveCss css mempty mempty
+
+phoneCss :: Css -> ResponsiveCss
+phoneCss css = ResponsiveCss mempty css mempty
+
+largeCss :: Css -> ResponsiveCss
+largeCss css = ResponsiveCss mempty mempty css
+
+instance Monoid ResponsiveCss where
+  mempty = ResponsiveCss mempty mempty mempty
+  (ResponsiveCss x y z) `mappend` (ResponsiveCss x' y' z') =
+      ResponsiveCss (x <> x') (y <> y') (z <> z')
+
+
+flattenResponsive :: Double -> ResponsiveCss -> Css
+flattenResponsive boundary rc = do
+    rcGlobalCss rc
+    query screen [M.maxWidth (px $ boundary - 1)] $ rcPhoneCss rc
+    query screen [M.minWidth $ px boundary] $ rcLargeCss rc
+
+
+mainLayout :: ResponsiveCss
+mainLayout =
+  globalCss (do
     star ? do
       boxSizing borderBox
 
@@ -47,38 +76,6 @@ mainLayout = do
     idRef "content" ? do
       display grid
 
-    query screen [M.maxWidth (px $ deviceSizeBoundaryPx - 1)] $ do
-      body ? do
-        fontSize $ pct 120
-
-      input ? do
-        fontSize $ pct 90
-
-      idRef "content" ? do
-        "grid-template-columns" -: "auto"
-        "grid-row-gap" -: "20 px"
-
-      idRef "footer-wrapper" ? do
-        marginTop $ px 30
-
-      idRef "copyright" ? do
-        order 2
-
-      idRef "links" ? do
-        order 1
-
-    query screen [M.minWidth $ px deviceSizeBoundaryPx] $ do
-      idRef "content" ? do
-        "grid-template-columns" -: "60% 40%"
-        "grid-column-gap" -: "50px"
-        padding' $ px 75
-
-      idRef "copyright" ? do
-        order 1
-
-      idRef "links" ? do
-        order 2
-
     idRef "registration-form" ? do
       alignSelf center
 
@@ -102,14 +99,45 @@ mainLayout = do
     idRef "links" |> star # firstOfType ? do
       marginLeft nil
 
+  ) <> phoneCss (do
+      body ? do
+        fontSize $ pct 120
+
+      input ? do
+        fontSize $ pct 90
+
+      idRef "content" ? do
+        "grid-template-columns" -: "auto"
+        "grid-row-gap" -: "20 px"
+
+      idRef "footer-wrapper" ? do
+        marginTop $ px 30
+
+      idRef "copyright" ? do
+        order 2
+
+      idRef "links" ? do
+        order 1
+
+  ) <> largeCss (do
+      idRef "content" ? do
+        "grid-template-columns" -: "60% 40%"
+        "grid-column-gap" -: "50px"
+        padding' $ px 75
+
+      idRef "copyright" ? do
+        order 1
+
+      idRef "links" ? do
+        order 2
+  )
 
   where
     shadowGrey = grayish 204
-    deviceSizeBoundaryPx = 600
 
 
-mainStyling :: Css
-mainStyling = do
+mainStyling :: ResponsiveCss
+mainStyling = globalCss $ do
     importUrl $
          "https://fonts.googleapis.com/css?family"
          <> "=Source+Sans+Pro:300,400,500,700"
