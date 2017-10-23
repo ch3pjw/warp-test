@@ -55,7 +55,7 @@ mainLayout = do
     query screen [M.minWidth $ px deviceSizeBoundaryPx] $ do
       idRef "content" ? do
         "grid-template-columns" -: "60% 40%"
-        "grid-column-gap" -: "50 px"
+        "grid-column-gap" -: "50px"
         padding' $ px 75
 
     idRef "registration-form" ? do
