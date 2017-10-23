@@ -16,10 +16,18 @@ import Clay.Selector (
 
 mainLayout :: Css
 mainLayout = do
+    star ? do
+      boxSizing borderBox
+
+    html ? do
+      height $ pct 100
+
     body ? do
       display flex
       flexFlow Fb.column Fb.nowrap
+      justifyContent spaceBetween
       margin' nil
+      -- Otherwise Firefox won't run the footer to the bottom:
       height $ pct 100
 
     body |> star |> C.div ? do
