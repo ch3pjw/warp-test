@@ -158,7 +158,7 @@ mainStyling = do
     submitButton # active ? do
       paddingTop $ px 11  -- Whatever it was +1
       paddingBottom $ px 9 -- Whatever it was -1
-      -- background none
+      "background" -: "none"
       backgroundColor goGreenH
       -- insetBoxShadow solid nil nil (px 5) "#777777"
       "box-shadow" -: "0 0 5px #777777 inset"
