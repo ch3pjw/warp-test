@@ -37,7 +37,7 @@ emailSubmission = page "Register Interest" $ do
     H.form ! method "post" ! id_ "registration-form" $ do
       H.label ! for "email" $ do
         "Email"
-      input ! id_ "email" ! type_ "text" ! placeholder "name@example.com"
+      input ! type_ "text" ! name "email" ! placeholder "name@example.com"
         ! autofocus "true" -- FIXME: is this right?
       input ! type_ "submit" ! value "Register interest"
       aside $ do
