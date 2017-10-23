@@ -172,7 +172,10 @@ margin'' :: Size a -> Size a -> Css
 margin'' y x = key "margin" (y ! x)
 
 vMargin :: Size a -> Css
-vMargin x = marginTop x >> marginBottom x
+vMargin y = marginTop y >> marginBottom y
+
+hMargin :: Size a -> Css
+hMargin x = marginLeft x >> marginRight x
 
 borderRadius' :: Size a -> Css
 borderRadius' x = borderRadius x x x x
