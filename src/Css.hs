@@ -58,11 +58,23 @@ mainLayout = do
         "grid-template-columns" -: "auto"
         "grid-row-gap" -: "20 px"
 
+      idRef "copyright" ? do
+        order 2
+
+      idRef "links" ? do
+        order 1
+
     query screen [M.minWidth $ px deviceSizeBoundaryPx] $ do
       idRef "content" ? do
         "grid-template-columns" -: "60% 40%"
         "grid-column-gap" -: "50px"
         padding' $ px 75
+
+      idRef "copyright" ? do
+        order 1
+
+      idRef "links" ? do
+        order 2
 
     idRef "registration-form" ? do
       alignSelf center
