@@ -10,7 +10,7 @@ import qualified Clay as C
 import qualified Clay.Flexbox as Fb
 import Clay.Media (screen)
 import qualified Clay.Media as M
-
+import Clay.Stylesheet (key)
 import Clay.Selector (
   SelectorF(..), Refinement(..), Predicate(Id), Path(Star), Fix(In))
 
@@ -160,16 +160,16 @@ mainStyling = do
 
 
 padding' :: Size a -> Css
-padding' x = padding x x x x
+padding' x = key "padding" x
 
 padding'' :: Size a -> Size a -> Css
-padding'' y x = padding y x y x
+padding'' y x = key "padding" (y ! x)
 
 margin' :: Size a -> Css
-margin' x = margin x x x x
+margin' x = key "margin" x
 
 margin'' :: Size a -> Size a -> Css
-margin'' y x = margin y x y x
+margin'' y x = key "margin" (y ! x)
 
 vMargin :: Size a -> Css
 vMargin x = marginTop x >> marginBottom x
@@ -179,6 +179,11 @@ borderRadius' x = borderRadius x x x x
 
 borderRadius'' :: Size a -> Size a -> Css
 borderRadius'' y x = borderRadius y x y x
+
+border' :: Size a -> Css
+border' x = key "border" x
+
+
 -- | The IsString-inferred way of specifying ID selectors is error prone (one
 --   can type "foo" instead of "#foo" all too easily. The `byId` function from
 --   Clay only prevides a Refinement, not a Selector. So, we implement our own
