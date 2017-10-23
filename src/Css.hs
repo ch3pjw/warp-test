@@ -122,9 +122,12 @@ mainStyling = do
     submitButton ? do
       cursor pointer
       background $ vGradient goGreen' goGreen
+      border' nil;
+      color white
+      fontWeight $ weight 700
 
     submitButton # hover ? do
-      background $ vGradient goGreenH' goGreenH
+      background $ vGradient goGreenH goGreenH'
 
     submitButton # active ? do
       paddingTop $ px 11  -- Whatever it was +1
