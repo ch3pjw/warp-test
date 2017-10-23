@@ -50,7 +50,7 @@ mainLayout = do
     query screen [M.maxWidth (px $ deviceSizeBoundaryPx - 1)] $ do
       idRef "content" ? do
         "grid-template-columns" -: "auto"
-        "grid-column-gap" -: "20 px"
+        "grid-row-gap" -: "20 px"
 
     query screen [M.minWidth $ px deviceSizeBoundaryPx] $ do
       idRef "content" ? do
