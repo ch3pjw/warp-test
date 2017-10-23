@@ -2,6 +2,7 @@
 
 module Lib where
 
+import Clay (Css, render)
 import Control.Monad (join)
 import qualified Data.Aeson as JSON
 import qualified Data.ByteString as BS
@@ -13,6 +14,7 @@ import Data.Pool (Pool)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
+import Data.Text.Lazy.Encoding (encodeUtf8)
 import qualified Data.URLEncoded as UrlE
 import qualified Data.UUID as UUID
 import qualified Database.Persist.Postgresql as DB
@@ -23,6 +25,7 @@ import Text.Blaze.Html5 (Html)
 import Text.Blaze.Html.Renderer.Utf8 (renderHtml)
 import qualified Text.Email.Validate as Email
 
+import Css
 import Registration (
     Store, sPoll, Actor, aSubmitEmailAddress, aVerify, aUnsubscribe,
     usEmailAddress)
@@ -65,6 +68,12 @@ htmlResponse html _ sendResponse = sendResponse $ Wai.responseLBS
     HTTP.status200
     [(HTTP.hContentType, "text/html; charset=utf-8")]
     (renderHtml html)
+
+cssResponse :: Css -> Wai.Application
+cssResponse css _ sendResponse = sendResponse $ Wai.responseLBS
+    HTTP.status200
+    [(HTTP.hContentType, "text/css; charset=utf-8")]
+    (encodeUtf8 $ render css)
 
 jsonResponse :: (JSON.ToJSON a) => a -> Wai.Application
 jsonResponse a _ sendResponse = sendResponse $ Wai.responseLBS
@@ -147,3 +156,7 @@ interestedResource actor store name req sendResponse =
     -- really be querying that.
     hasEmail uuid = sPoll store uuid >>=
         return . not . Text.null . usEmailAddress
+
+
+screenCss :: Wai.Application
+screenCss = cssResponse $ mainLayout >> mainStyling

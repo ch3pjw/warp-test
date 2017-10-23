@@ -93,6 +93,7 @@ root icp ir ig authMiddleware =
   childEps
     [ ("david", getEp $ githubRedir "foolswood")
     , ("paul", getEp $ githubRedir "ch3pjw")
+    , ("screen.css", getEp $ screenCss)
     , ("api", authMiddleware <$> childEps
         [("interested", getEp ig)]
       )
