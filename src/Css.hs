@@ -58,6 +58,9 @@ mainLayout = do
         "grid-template-columns" -: "auto"
         "grid-row-gap" -: "20 px"
 
+      idRef "footer-wrapper" ? do
+        marginTop $ px 30
+
       idRef "copyright" ? do
         order 2
 
