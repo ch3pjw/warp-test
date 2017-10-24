@@ -85,7 +85,7 @@ jsonResponse :: (JSON.ToJSON a) => a -> Wai.Application
 jsonResponse a = respond CTJson HTTP.status200 (JSON.encode a)
 
 interestedSubmissionGet :: Wai.Application
-interestedSubmissionGet = htmlResponse Templates.emailSubmission
+interestedSubmissionGet = htmlResponse $ Templates.emailSubmission False
 
 
 -- | This is posted by the web form
@@ -104,10 +104,9 @@ interestedCollectionPost actor store req sendResponse = do
       (Just canonical) -> do
             aSubmitEmailAddress actor store $ decodeUtf8 canonical
             submissionResponse (decodeUtf8 canonical) req sendResponse
-      Nothing -> sendResponse $ Wai.responseLBS
-        HTTP.status400
-        [(HTTP.hContentType, "text/plain")]
-        "Invalid email address"
+      Nothing ->
+        htmlResponse' HTTP.status400 (Templates.emailSubmission True)
+        req sendResponse
 
 
 -- | This is used by us to get all the email addresses out

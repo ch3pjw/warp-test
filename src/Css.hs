@@ -175,6 +175,10 @@ mainStyling = globalCss $ do
       -- insetBoxShadow solid nil nil (px 5) "#777777"
       "box-shadow" -: "0 0 5px #777777 inset"
 
+    input # ".error" ? do
+      border solid (px 1) "#e82e1d"
+      backgroundColor $ hsl 5 85 98
+
     idRef "footer-wrapper" ? do
       backgroundColor $ grayish 238
       boxShadow nil nil (px 15) $ grayish 204

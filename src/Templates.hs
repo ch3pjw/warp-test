@@ -18,8 +18,8 @@ import Css
 id_ :: AttributeValue -> Attribute
 id_ = A.id
 
-emailSubmission :: Html
-emailSubmission =
+emailSubmission :: Bool -> Html
+emailSubmission emailError =
   page "Register Interest" (Just emailSubmissionCss) $ do
     div ! id_ "description" $ do
       h1 $ do
@@ -39,12 +39,17 @@ emailSubmission =
     H.form ! method "post" ! id_ "registration-form" $ do
       H.label ! for "email" $ do
         "Email"
-      input ! type_ "text" ! name "email" ! placeholder "name@example.com"
-        ! autofocus "true" -- FIXME: is this right?
+      emailInput
       input ! type_ "submit" ! value "Register interest"
       aside $ do
         "We'll only contact you about service updates and the chance to "
         "try out pre-release software"
+  where
+    emailInput' =
+        input ! type_ "text" ! name "email" ! placeholder "name@example.com"
+        ! autofocus "true" -- FIXME: is this right?
+    emailInput =
+        if emailError then emailInput' ! class_ "error" else emailInput'
 
 nbsp :: MarkupM ()
 nbsp = preEscapedToHtml ("&nbsp;" :: Text)
