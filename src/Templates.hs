@@ -4,12 +4,16 @@ module Templates where
 
 import Prelude hiding (div)
 import Control.Monad
+import qualified Clay
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Text.Lazy (toStrict)
 import Text.Blaze.Html5 as H
 import Text.Blaze.Html5.Attributes as A
 import Text.Blaze.Internal (customParent, MarkupM)
+
+import Css
 
 id_ :: AttributeValue -> Attribute
 id_ = A.id
@@ -18,7 +22,8 @@ id_ = A.id
 mainSiteLink = "https://www.concertdaw.co.uk"
 
 emailSubmission :: Html
-emailSubmission = page "Register Interest" $ do
+emailSubmission =
+  page "Register Interest" (Just emailSubmissionCss) $ do
     div ! id_ "description" $ do
       h1 $ do
         "Collaborative Audio Production"
@@ -51,28 +56,33 @@ copy :: MarkupM ()
 copy = preEscapedToHtml ("&copy;" :: Text)
 
 emailSubmissionConfirmation :: Text -> Html
-emailSubmissionConfirmation email = page "Verification Sent" $ do
-    h1 "Concert"
+emailSubmissionConfirmation email =
+  page "Verification Sent" (Just notificationCss) $ do
+    h1 "Please Verify"
     p $ do
       "We sent a verification link to "
       text email
       ". Please check your inbox."
 
 emailVerificationConfirmation :: Html
-emailVerificationConfirmation = page "Email Verified" $ do
-    h1 "Concert"
+emailVerificationConfirmation =
+  page "Regsitered" (Just notificationCss) $ do
+    h1 "Registered"
+    p "Thank you for verifying your email address."
     p $ do
-      "Thank you for verifying your email address. We'll email you when we've "
-      "got news about our software or when we're looking for beta testers."
+      "We'll email you when we've got news about our software or when we're "
+      "looking for beta testers."
 
 emailUnsubscriptionConfirmation :: Html
-emailUnsubscriptionConfirmation = page "Unsubscribed" $ do
-    h1 "Concert"
+emailUnsubscriptionConfirmation =
+  page "Unsubscribed" (Just notificationCss) $ do
+    h1 "Thank you!"
+    p "Thanks for being interested in Concert."
     p "We've removed your email address from our list. Sorry to see you go."
 
 
-page :: Text -> Html -> Html
-page pageTitle pageContent = docTypeHtml $ do
+page :: Text -> Maybe ResponsiveCss -> Html -> Html
+page pageTitle pageCss pageContent = docTypeHtml $ do
     htmlHead
     body $ do
       pageHeader
@@ -85,6 +95,10 @@ page pageTitle pageContent = docTypeHtml $ do
         meta ! name "viewport" ! content "width=device-width, initial-scale=1"
         H.title titleText
         link ! rel "stylesheet" ! href "/screen.css"
+        maybe
+          (return ())
+          (H.style . text . toStrict . Clay.render . flattenResponsive 600)
+          pageCss
 
     pageHeader =
         header ! id_ "header-wrapper" $ do

@@ -73,16 +73,6 @@ mainLayout =
       alignItems center
       vMargin $ px 10
 
-    idRef "content" ? do
-      display grid
-
-    idRef "registration-form" ? do
-      alignSelf center
-
-    form ? do
-      display flex
-      flexFlow Fb.column Fb.nowrap
-
     idRef "footer-wrapper" ? do
       Fb.flex 1 0 auto
 
@@ -106,10 +96,6 @@ mainLayout =
       input ? do
         fontSize $ pct 90
 
-      idRef "content" ? do
-        "grid-template-columns" -: "auto"
-        "grid-row-gap" -: "20 px"
-
       idRef "footer-wrapper" ? do
         marginTop $ px 30
 
@@ -120,11 +106,6 @@ mainLayout =
         order 1
 
   ) <> largeCss (do
-      idRef "content" ? do
-        "grid-template-columns" -: "60% 40%"
-        "grid-column-gap" -: "50px"
-        padding' $ px 75
-
       idRef "copyright" ? do
         order 1
 
@@ -218,6 +199,41 @@ mainStyling = globalCss $ do
     recordRed = hsl 5 82 51
     inputField = input # ("type" @= "text")
     submitButton = input # ("type" @= "submit")
+
+
+emailSubmissionCss :: ResponsiveCss
+emailSubmissionCss = globalCss (do
+    idRef "content" ? do
+      display grid
+
+    idRef "registration-form" ? do
+      alignSelf center
+
+    form ? do
+      display flex
+      flexFlow Fb.column Fb.nowrap
+  ) <> phoneCss (do
+      idRef "content" ? do
+        "grid-template-columns" -: "auto"
+        "grid-row-gap" -: "20 px"
+  ) <> largeCss (do
+      idRef "content" ? do
+        "grid-template-columns" -: "60% 40%"
+        "grid-column-gap" -: "50px"
+        padding' $ px 75
+  )
+
+
+notificationCss :: ResponsiveCss
+notificationCss = globalCss (do
+    h1 ? do
+      fontSize $ em 2.5
+  ) <> largeCss (do
+    idRef "content" ? do
+      padding' $ px 75
+    idRef "content" ? p ? do
+      width $ px 450
+  )
 
 
 padding' :: Size a -> Css
