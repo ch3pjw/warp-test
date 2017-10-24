@@ -5,10 +5,13 @@ module Templates where
 import Prelude hiding (div)
 import Control.Monad
 import qualified Clay
+import qualified Data.ByteString as BS
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Text.Encoding (decodeUtf8)
 import Data.Text.Lazy (toStrict)
+import qualified Network.HTTP.Types as HTTP
 import Text.Blaze.Html5 as H
 import Text.Blaze.Html5.Attributes as A
 import Text.Blaze.Internal (customParent, MarkupM)

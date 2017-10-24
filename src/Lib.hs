@@ -9,6 +9,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.UTF8 as LUTF8
 import qualified Data.ByteString.UTF8 as UTF8
+import Data.List (partition)
 import Data.Monoid
 import Data.Pool (Pool)
 import Data.String (IsString)
