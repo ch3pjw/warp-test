@@ -127,6 +127,7 @@ mainStyling = globalCss $ do
     body ? do
       fontFamily ["Source Sans Pro"] [sansSerif]
       color offBlack
+      fontSize $ px 18
 
     (h1 <> h2 <> h3) ? do
       fontFamily ["Raleway"] [sansSerif]
