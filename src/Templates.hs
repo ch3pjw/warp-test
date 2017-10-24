@@ -18,9 +18,6 @@ import Css
 id_ :: AttributeValue -> Attribute
 id_ = A.id
 
--- FIXME: this should be injected into the page
-mainSiteLink = "https://www.concertdaw.co.uk"
-
 emailSubmission :: Html
 emailSubmission =
   page "Register Interest" (Just emailSubmissionCss) $ do
@@ -103,7 +100,7 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
     pageHeader =
         header ! id_ "header-wrapper" $ do
           div ! id_ "header" $ do
-            a ! href mainSiteLink $ do
+            a ! href "/" $ do
               picture $ do
                 source
                 img
