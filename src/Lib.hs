@@ -55,31 +55,33 @@ defaultApp req sendResponse =
       [(HTTP.hContentType, "text/plain")]
       (LUTF8.fromString . show $ Wai.requestHeaders req)
 
+data ContentType = CTPlainText | CTJson | CTHtml | CTCss
+
+ctString :: ContentType -> BS.ByteString
+ctString CTPlainText = "text/plain; charset=utf-8"
+ctString CTJson = "application/json; charset=utf-8"
+ctString CTHtml = "text/html; charset=utf-8"
+ctString CTCss = "text/css; charset=utf-8"
+
+respond :: ContentType -> HTTP.Status -> LBS.ByteString -> Wai.Application
+respond contentType status body _ sendResponse =
+    sendResponse $ Wai.responseLBS
+      status [(HTTP.hContentType, ctString contentType)] body
 
 textResponse' :: HTTP.Status -> LBS.ByteString -> Wai.Application
-textResponse' status body _ sendResponse = sendResponse $
-    Wai.responseLBS status [(HTTP.hContentType, "text/plain")] body
+textResponse' = respond CTPlainText
 
 textResponse :: LBS.ByteString -> Wai.Application
-textResponse = textResponse' HTTP.status200
+textResponse = respond CTPlainText HTTP.status200
 
 htmlResponse :: Html -> Wai.Application
-htmlResponse html _ sendResponse = sendResponse $ Wai.responseLBS
-    HTTP.status200
-    [(HTTP.hContentType, "text/html; charset=utf-8")]
-    (renderHtml html)
+htmlResponse html = respond CTHtml HTTP.status200 $ renderHtml html
 
 cssResponse :: Css -> Wai.Application
-cssResponse css _ sendResponse = sendResponse $ Wai.responseLBS
-    HTTP.status200
-    [(HTTP.hContentType, "text/css; charset=utf-8")]
-    (encodeUtf8 $ render css)
+cssResponse css = respond CTCss HTTP.status200 (encodeUtf8 $ render css)
 
 jsonResponse :: (JSON.ToJSON a) => a -> Wai.Application
-jsonResponse a _ sendResponse = sendResponse $ Wai.responseLBS
-    HTTP.status200
-    [(HTTP.hContentType, "application/json")]
-    (JSON.encode a)
+jsonResponse a = respond CTJson HTTP.status200 (JSON.encode a)
 
 interestedSubmissionGet :: Wai.Application
 interestedSubmissionGet = htmlResponse Templates.emailSubmission
