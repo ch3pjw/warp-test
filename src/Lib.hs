@@ -73,16 +73,26 @@ textResponse' :: HTTP.Status -> LBS.ByteString -> Wai.Application
 textResponse' = respond CTPlainText
 
 textResponse :: LBS.ByteString -> Wai.Application
-textResponse = respond CTPlainText HTTP.status200
+textResponse = textResponse' HTTP.status200
+
+htmlResponse' :: HTTP.Status -> Html -> Wai.Application
+htmlResponse' status html = respond CTHtml status $ renderHtml html
 
 htmlResponse :: Html -> Wai.Application
-htmlResponse html = respond CTHtml HTTP.status200 $ renderHtml html
+htmlResponse = htmlResponse' HTTP.status200
 
 cssResponse :: Css -> Wai.Application
 cssResponse css = respond CTCss HTTP.status200 (encodeUtf8 $ render css)
 
 jsonResponse :: (JSON.ToJSON a) => a -> Wai.Application
-jsonResponse a = respond CTJson HTTP.status200 (JSON.encode a)
+jsonResponse x = respond CTJson HTTP.status200 (JSON.encode x)
+
+errorResponse
+  :: HTTP.Status -> BS.ByteString -> [BS.ByteString] -> Wai.Application
+errorResponse status title msgs _ sendResponse =
+    sendResponse $ Wai.responseLBS status headers ""
+  where
+    headers = fmap ((,) "X-Error-Message") $ title : msgs
 
 interestedSubmissionGet :: Wai.Application
 interestedSubmissionGet = htmlResponse $ Templates.emailSubmission False
