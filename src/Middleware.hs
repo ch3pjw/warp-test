@@ -41,17 +41,16 @@ replaceHeaders h@(hName, _) = (h:) . filter (\(n, _) -> n /= hName)
 
 -- | Error prettifying middleware
 prettifyError :: Wai.Middleware
-prettifyError app req sendResponse = app req mySendResponse
+prettifyError = Wai.modifyResponse f
+  -- FIXME: this should probably do something smarter. It could combine
+  -- the response body with a template?
   where
-    mySendResponse :: Wai.Response -> IO Wai.ResponseReceived
-    mySendResponse response =
+    f response =
       let status = Wai.responseStatus response in
       if HTTP.statusIsSuccessful status
-      then sendResponse response
-      else sendResponse $ Wai.responseLBS
-        -- FIXME: this should probably do something smarter. It could combine
-        -- the response body with a template?
-        status
-        (replaceHeaders (HTTP.hContentType, "text/plain") $
-         Wai.responseHeaders response)
-        (LBS.fromStrict $ HTTP.statusMessage status)
+      then response
+      else Wai.responseLBS
+      status
+      (replaceHeaders (HTTP.hContentType, "text/plain") $
+       Wai.responseHeaders response)
+      (LBS.fromStrict $ HTTP.statusMessage status)
