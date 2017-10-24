@@ -16,7 +16,8 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   ghc-options:         -Wall
-  exposed-modules:     Lib
+  exposed-modules:     Css
+                     , Lib
                      , Mailer
                      , Middleware
                      , ReadView
@@ -30,6 +31,7 @@ library
                      , blaze-html
                      , blaze-markup
                      , bytestring
+                     , clay
                      , cryptohash
                      , datetime
                      , email-validate

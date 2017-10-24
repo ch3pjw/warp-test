@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Middleware
-  (forceTls, prettifyError)
+  (forceTls, prettifyError, prettifyError', replaceHeaders)
 where
 
+import Control.Monad
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Monoid
@@ -35,23 +36,40 @@ forceTls app req sendResponse =
       "https://" <> host <> Wai.rawPathInfo req <> Wai.rawQueryString req
 
 
+hasHeader :: HTTP.HeaderName -> HTTP.ResponseHeaders -> Bool
+hasHeader name = any $ (== name) . fst
+
 replaceHeaders ::
   (HTTP.HeaderName, BS.ByteString) -> [HTTP.Header] -> [HTTP.Header]
 replaceHeaders h@(hName, _) = (h:) . filter (\(n, _) -> n /= hName)
 
+
 -- | Error prettifying middleware
 prettifyError :: Wai.Middleware
-prettifyError app req sendResponse = app req mySendResponse
+prettifyError = prettifyError' simpleErrorTransform
+
+
+prettifyError' :: (Wai.Response -> Wai.Response) -> Wai.Middleware
+prettifyError' errorTransform = Wai.modifyResponse f
   where
-    mySendResponse :: Wai.Response -> IO Wai.ResponseReceived
-    mySendResponse response =
-      let status = Wai.responseStatus response in
-      if HTTP.statusIsSuccessful status
-      then sendResponse response
-      else sendResponse $ Wai.responseLBS
-        -- FIXME: this should probably do something smarter. It could combine
-        -- the response body with a template?
-        status
-        (replaceHeaders (HTTP.hContentType, "text/plain") $
-         Wai.responseHeaders response)
-        (LBS.fromStrict $ HTTP.statusMessage status)
+    f response =
+      if shouldTransform response
+      then errorTransform response
+      else response
+    statusIsError =
+      liftM2 (||) HTTP.statusIsClientError HTTP.statusIsServerError
+    shouldTransform response =
+      statusIsError (Wai.responseStatus response)
+      && not (hasHeader HTTP.hContentType (Wai.responseHeaders response))
+
+
+simpleErrorTransform :: Wai.Response -> Wai.Response
+simpleErrorTransform response =
+  -- FIXME: this should probably do something smarter. It could combine
+  -- the response body with a template?
+  let status = Wai.responseStatus response in
+  Wai.responseLBS
+    status
+    (replaceHeaders (HTTP.hContentType, "text/plain") $
+     Wai.responseHeaders response)
+    (LBS.fromStrict $ HTTP.statusMessage status)
