@@ -3,7 +3,7 @@
 module Lib where
 
 import Clay (Css, render)
-import Control.Monad (join)
+import Control.Monad (join, when)
 import qualified Data.Aeson as JSON
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
@@ -11,6 +11,7 @@ import qualified Data.ByteString.Lazy.UTF8 as LUTF8
 import qualified Data.ByteString.UTF8 as UTF8
 import Data.Monoid
 import Data.Pool (Pool)
+import Data.String (IsString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
@@ -21,7 +22,8 @@ import qualified Database.Persist.Postgresql as DB
 import Database.Persist.Postgresql ((==.))
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
-import Text.Blaze.Html5 (Html)
+import Text.Blaze.Html5 (Html, h1, p, a, (!), text)
+import Text.Blaze.Html5.Attributes (href)
 import Text.Blaze.Html.Renderer.Utf8 (renderHtml)
 import qualified Text.Email.Validate as Email
 
@@ -145,29 +147,56 @@ verificationResponse :: Wai.Application
 verificationResponse = htmlResponse Templates.emailVerificationConfirmation
 
 
+-- FIXME: this might want to be from the environment
+helpEmailAddress :: (IsString a) => a
+helpEmailAddress = "hello@concertdaw.co.uk"
+
 -- | This sets the users email to verified when they visit
 interestedResource :: Actor -> Store -> Text -> Wai.Application
 interestedResource actor store name req sendResponse =
-  case UUID.fromText name of
-    Nothing -> invalidUuidResp
-    (Just uuid) -> do
-      present <- hasEmail uuid
-      if present
-        then act (getVerb req) uuid
-        else invalidUuidResp
+    go (getVerb req) (UUID.fromText name)
   where
+    go (Just "verify") (Just uuid) = do
+        present <- hasEmail uuid
+        if present
+        then aVerify actor store uuid >> verificationResponse req sendResponse
+        else htmlResponse' HTTP.status404 verErrHtml req sendResponse
+    go (Just "verify") Nothing =
+        htmlResponse' HTTP.status404 verErrHtml req sendResponse
+    go (Just "unsubscribe") (Just uuid) = do
+        present <- hasEmail uuid
+        when present $ aUnsubscribe actor store uuid
+        unsubscriptionResponse req sendResponse
+    go (Just "unsubscribe") Nothing = unsubscriptionResponse req sendResponse
+    go _ Nothing = htmlResponse' HTTP.status404 genericErrHtml req sendResponse
+    go _ _ = htmlResponse' HTTP.status400 genericErrHtml req sendResponse
     getVerb = join . lookup "action" . HTTP.queryToQueryText . Wai.queryString
-    act mVerb uuid = case mVerb of
-        (Just "verify") -> aVerify actor store uuid
-            >> verificationResponse req sendResponse
-        (Just "unsubscribe") -> aUnsubscribe actor store uuid
-            >> unsubscriptionResponse req sendResponse
-        _ -> textResponse' HTTP.status400 "Unrecognised action" req sendResponse
-    invalidUuidResp = textResponse' HTTP.status404 "Invalid ID" req sendResponse
     -- FIXME: this poll is a bit of a hack; when we have a read view, we should
     -- really be querying that.
     hasEmail uuid = sPoll store uuid >>=
         return . not . Text.null . usEmailAddress
+    verErrHtml =
+      Templates.page ("Verification Failure") (Just notificationCss) $ do
+        h1 $ "Verification failed"
+        p $ do
+          "We didn't recognise your verification link. "
+          "Links expire after 24 hours, but you can always "
+          a ! href "/interested" $ "resubmit"
+          " your email address."
+    genericErrHtml =
+      Templates.page ("Unrecognised Link") (Just notificationCss) $ do
+        h1 $ "Unrecognised link"
+        p $ do
+          "We didn't recognise the subscription link you visted. You can "
+          "always try "
+          a ! href "/interested" $ "resubmitting"
+          " your email address."
+        p $ do
+          "If you need some help, get in touch at "
+          a ! href (mailto helpEmailAddress "Signup%20help") $
+            text helpEmailAddress
+          "."
+    mailto addr subj = "mailto:" <> addr <> "?Subject=" <> subj
 
 
 screenCss :: Wai.Application
