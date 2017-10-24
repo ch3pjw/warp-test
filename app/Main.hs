@@ -25,7 +25,8 @@ import ReadView
 import Mailer
 import Lib
 import Router
-import Middleware (forceTls, prettifyError)
+import Templates
+import Middleware (forceTls, prettifyError')
 
 main :: IO ()
 main = do
@@ -52,7 +53,8 @@ main = do
     let icp = interestedCollectionPost actor store
     let ir = interestedResource actor store
     let ig = interestedCollectionGet pool
-    let app = prettifyError $ dispatch $ root icp ir ig authMiddleware
+    let errHandler = prettifyError' $ templatedErrorTransform errorTemplate
+    let app = errHandler $ dispatch $ root icp ir ig authMiddleware
 
     withAsync (viewWorker pool (U.readChan o2)) $ \viewWorkerAsync -> do
         link viewWorkerAsync

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Middleware
-  (forceTls, prettifyError)
+  (forceTls, prettifyError, prettifyError', replaceHeaders)
 where
 
 import Control.Monad
@@ -36,9 +36,13 @@ forceTls app req sendResponse =
       "https://" <> host <> Wai.rawPathInfo req <> Wai.rawQueryString req
 
 
+hasHeader :: HTTP.HeaderName -> HTTP.ResponseHeaders -> Bool
+hasHeader name = any $ (== name) . fst
+
 replaceHeaders ::
   (HTTP.HeaderName, BS.ByteString) -> [HTTP.Header] -> [HTTP.Header]
 replaceHeaders h@(hName, _) = (h:) . filter (\(n, _) -> n /= hName)
+
 
 -- | Error prettifying middleware
 prettifyError :: Wai.Middleware
@@ -49,11 +53,14 @@ prettifyError' :: (Wai.Response -> Wai.Response) -> Wai.Middleware
 prettifyError' errorTransform = Wai.modifyResponse f
   where
     f response =
-      if not . statusIsError $ Wai.responseStatus response
-      then response
-      else errorTransform response
+      if shouldTransform response
+      then errorTransform response
+      else response
     statusIsError =
       liftM2 (||) HTTP.statusIsClientError HTTP.statusIsServerError
+    shouldTransform response =
+      statusIsError (Wai.responseStatus response)
+      && not (hasHeader HTTP.hContentType (Wai.responseHeaders response))
 
 
 simpleErrorTransform :: Wai.Response -> Wai.Response

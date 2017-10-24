@@ -129,6 +129,19 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
                 intersperseM
                    nbsp ["Concert", "Audio", "Technologies", "Limited"]
 
+errorTemplate :: HTTP.Status -> [BS.ByteString] -> Html
+errorTemplate status errMsgs =
+  let
+    s = decodeUtf8 $ HTTP.statusMessage status
+    errMsgs' = fmap decodeUtf8 errMsgs
+  in
+    case errMsgs' of
+      [] -> page s (Just notificationCss) $ h1 (text s)
+      (m:ms) -> page m (Just notificationCss) $ do
+        h1 $ text m
+        mapM_ (p . text) ms
+
+
 pretty404 :: Html
 pretty404 = undefined
 

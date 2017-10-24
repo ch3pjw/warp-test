@@ -33,6 +33,7 @@ import ReadView (
     emailRegistrationEmailAddress,
     EntityField(EmailRegistrationId, EmailRegistrationVerified))
 import qualified Templates
+import Middleware (replaceHeaders)
 
 
 -- Redirect sub-application
@@ -162,3 +163,18 @@ interestedResource actor store name req sendResponse =
 
 screenCss :: Wai.Application
 screenCss = cssResponse . flattenResponsive 600 $ mainLayout <> mainStyling
+
+
+templatedErrorTransform  ::
+  (HTTP.Status -> [BS.ByteString] -> Html) -> Wai.Response -> Wai.Response
+templatedErrorTransform t response =
+    Wai.responseLBS status newHdrs (renderHtml html)
+  where
+    status = Wai.responseStatus response
+    (errMsgHdrs, regularHdrs) =
+        partition isErrMsg $ Wai.responseHeaders response
+    isErrMsg = (== "X-Error-Message") . fst
+    newHdrs = replaceHeaders
+        (HTTP.hContentType, "text/html; charset=utf-8")
+        regularHdrs
+    html = t status $ fmap snd errMsgHdrs
