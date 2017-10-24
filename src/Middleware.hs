@@ -4,6 +4,7 @@ module Middleware
   (forceTls, prettifyError)
 where
 
+import Control.Monad
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Monoid
@@ -41,16 +42,27 @@ replaceHeaders h@(hName, _) = (h:) . filter (\(n, _) -> n /= hName)
 
 -- | Error prettifying middleware
 prettifyError :: Wai.Middleware
-prettifyError = Wai.modifyResponse f
-  -- FIXME: this should probably do something smarter. It could combine
-  -- the response body with a template?
+prettifyError = prettifyError' simpleErrorTransform
+
+
+prettifyError' :: (Wai.Response -> Wai.Response) -> Wai.Middleware
+prettifyError' errorTransform = Wai.modifyResponse f
   where
     f response =
-      let status = Wai.responseStatus response in
-      if HTTP.statusIsSuccessful status
+      if not . statusIsError $ Wai.responseStatus response
       then response
-      else Wai.responseLBS
-      status
-      (replaceHeaders (HTTP.hContentType, "text/plain") $
-       Wai.responseHeaders response)
-      (LBS.fromStrict $ HTTP.statusMessage status)
+      else errorTransform response
+    statusIsError =
+      liftM2 (||) HTTP.statusIsClientError HTTP.statusIsServerError
+
+
+simpleErrorTransform :: Wai.Response -> Wai.Response
+simpleErrorTransform response =
+  -- FIXME: this should probably do something smarter. It could combine
+  -- the response body with a template?
+  let status = Wai.responseStatus response in
+  Wai.responseLBS
+    status
+    (replaceHeaders (HTTP.hContentType, "text/plain") $
+     Wai.responseHeaders response)
+    (LBS.fromStrict $ HTTP.statusMessage status)
