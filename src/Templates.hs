@@ -7,6 +7,7 @@ import Control.Monad
 import qualified Clay
 import qualified Data.ByteString as BS
 import Data.Monoid
+import Data.String (IsString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
@@ -91,6 +92,16 @@ emailUnsubscriptionConfirmation =
     p "We've removed your email address from our list. Sorry to see you go."
 
 
+blogLink :: (IsString a) => a
+blogLink = "https://medium.com/@concertdaw"
+
+twitterLink :: (IsString a) => a
+twitterLink = "https://twitter.com/@concertdaw"
+
+githubLink :: (IsString a) => a
+githubLink = "https://github.com/concert"
+
+
 page :: Text -> Maybe ResponsiveCss -> Html -> Html
 page pageTitle pageCss pageContent = docTypeHtml $ do
     htmlHead
@@ -128,9 +139,9 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
         footer ! id_ "footer-wrapper" $ do
           div ! id_ "footer" $ do
             ul ! id_ "links" $ do
-              li $ a ! href "https://medium.com/@concertdaw" $ "Blog"
-              li $ a ! href "https://twitter.com/@concertdaw" $ "Twitter"
-              li $ a ! href "https://github.com/concert" $ "Github"
+              li $ a ! href blogLink $ "Blog"
+              li $ a ! href twitterLink $ "Twitter"
+              li $ a ! href githubLink $ "Github"
             div ! id_ "copyright" $ do
               "Copyright "
               copy
