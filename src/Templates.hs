@@ -69,27 +69,39 @@ copy = preEscapedToHtml ("&copy;" :: Text)
 emailSubmissionConfirmation :: Text -> Html
 emailSubmissionConfirmation email =
   page "Verification Sent" (Just notificationCss) $ do
-    h1 "Please Verify"
+    h1 "Please verify your address"
     p $ do
       "We sent a verification link to "
-      text email
-      ". Please check your inbox."
+      strong $ text email
+      "."
+    p $ do
+      "Please check your inbox and visit the link so that we can be sure it's "
+      "okay to send you emails."
 
 emailVerificationConfirmation :: Html
 emailVerificationConfirmation =
-  page "Regsitered" (Just notificationCss) $ do
-    h1 "Registered"
-    p "Thank you for verifying your email address."
+  page "Registered" (Just notificationCss) $ do
+    h1 "Registered!"
+    p "Thanks for verifying your address."
     p $ do
-      "We'll email you when we've got news about our software or when we're "
+      "We'll email you when we've got news about our software and when we're "
       "looking for beta testers."
+    p $ do
+      "In the meantime, you can "
+      a ! href blogLink $ "read our blog"
+      " or "
+      a ! href twitterLink $ "follow us on Twitter"
+      "."
+
 
 emailUnsubscriptionConfirmation :: Html
 emailUnsubscriptionConfirmation =
   page "Unsubscribed" (Just notificationCss) $ do
-    h1 "Thank you!"
-    p "Thanks for being interested in Concert."
-    p "We've removed your email address from our list. Sorry to see you go."
+    h1 "Bye :-("
+    p $ do
+      "We've removed your address from our mailing list. "
+      "Thanks for being interested in Concert."
+    p $ "Unsubscribed by mistake? "
 
 
 blogLink :: (IsString a) => a
