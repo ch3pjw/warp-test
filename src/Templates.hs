@@ -43,10 +43,10 @@ emailSubmission emailError =
       H.label ! for "email" $ do
         "Email"
       emailInput
-      input ! type_ "submit" ! value "Register interest"
+      input ! type_ "submit" ! value "Sign up for updates"
       aside $ do
         "We'll only contact you about service updates and the chance to "
-        "try out pre-release software"
+        "try out pre-release software."
   where
     emailInput' =
         input ! type_ "text" ! name "email" ! placeholder "name@example.com"
