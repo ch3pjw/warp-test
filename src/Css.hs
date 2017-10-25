@@ -153,13 +153,13 @@ mainStyling = globalCss $ do
     idRef "header" ? a # hover ? do
       color recordRed
 
-    inputField <> submitButton ? do
+    textInput <> emailInput <> submitButton ? do
       margin'' (px 5) nil
       padding' $ px 10
       minWidth $ px 200
       borderRadius' $ px 5
 
-    inputField ? do
+    textInput <> emailInput ? do
       border solid (px 1) darkgray;
       backgroundColor offWhite
 
@@ -207,8 +207,10 @@ mainStyling = globalCss $ do
     goGreenH = hsl 138 78 42
     goGreenH' = hsl 121 78 35
     recordRed = hsl 5 82 51
-    inputField = input # ("type" @= "text")
-    submitButton = input # ("type" @= "submit")
+    ip t = input # ("type" @= t)
+    textInput = ip "text"
+    emailInput = ip "email"
+    submitButton = ip "submit"
 
 
 emailSubmissionCss :: ResponsiveCss

@@ -49,7 +49,7 @@ emailSubmission emailError =
         "try out pre-release software."
   where
     emailInput' =
-        input ! type_ "text" ! name "email" ! placeholder "name@example.com"
+        input ! type_ "email" ! name "email" ! placeholder "name@example.com"
         ! autofocus "true" -- FIXME: is this right?
     emailInput =
         if emailError then emailInput' ! class_ "error" else emailInput'
