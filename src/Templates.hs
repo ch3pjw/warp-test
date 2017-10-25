@@ -40,8 +40,6 @@ emailSubmission emailError =
         "Sign up to our pre-release mailing list to register interest in "
         "beta testing."
     H.form ! method "post" ! id_ "registration-form" $ do
-      H.label ! for "email" $ do
-        "Email"
       emailInput
       input ! type_ "submit" ! value "Sign up for updates"
       aside $ do
@@ -52,7 +50,14 @@ emailSubmission emailError =
         input ! type_ "email" ! name "email" ! placeholder "name@example.com"
         ! autofocus "true" -- FIXME: is this right?
     emailInput =
-        if emailError then emailInput' ! class_ "error" else emailInput'
+        if emailError
+        then do
+          H.label ! for "email" ! class_ "error" $
+            "Please enter a valid email address"
+          emailInput' ! class_ "error"
+        else do
+          H.label ! for "email" $ "Email"
+          emailInput'
 
 nbsp :: MarkupM ()
 nbsp = preEscapedToHtml ("&nbsp;" :: Text)

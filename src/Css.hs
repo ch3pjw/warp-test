@@ -158,6 +158,7 @@ mainStyling = globalCss $ do
       padding' $ px 10
       minWidth $ px 200
       borderRadius' $ px 5
+      fontSizeCustom smaller
 
     textInput <> emailInput ? do
       border solid (px 1) darkgray;
@@ -182,8 +183,12 @@ mainStyling = globalCss $ do
       "box-shadow" -: "0 0 5px #777777 inset"
 
     input # ".error" ? do
-      border solid (px 1) "#e82e1d"
+      border solid (px 1) recordRed
       backgroundColor $ hsl 5 85 98
+
+    label # ".error" ? do
+      color recordRed
+      fontSizeCustom smaller
 
     idRef "footer-wrapper" ? do
       backgroundColor $ grayish 238
