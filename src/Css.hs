@@ -83,10 +83,15 @@ mainLayout =
       paddingTop $ px 20
       paddingBottom $ px 20
 
-    idRef "links" |> star ? do
+    ul # byId "links" ? do
+      padding' nil
+      margin' nil
+
+    idRef "links" ? li ? do
+      display inline
       marginLeft $ px 10
 
-    idRef "links" |> star # firstOfType ? do
+    idRef "links" ? li # firstOfType ? do
       marginLeft nil
 
   ) <> phoneCss (do

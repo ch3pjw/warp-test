@@ -122,10 +122,10 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
     pageFooter =
         footer ! id_ "footer-wrapper" $ do
           div ! id_ "footer" $ do
-            div ! id_ "links" $ do
-              a ! href "https://medium.com/@concertdaw" $ "Blog"
-              a ! href "https://twitter.com/@concertdaw" $ "Twitter"
-              a ! href "https://github.com/concert" $ "Open" >> nbsp >> "Source"
+            ul ! id_ "links" $ do
+              li $ a ! href "https://medium.com/@concertdaw" $ "Blog"
+              li $ a ! href "https://twitter.com/@concertdaw" $ "Twitter"
+              li $ a ! href "https://github.com/concert" $ "Github"
             div ! id_ "copyright" $ do
               "Copyright "
               copy
