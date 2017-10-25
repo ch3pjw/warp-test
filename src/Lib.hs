@@ -3,16 +3,18 @@
 module Lib where
 
 import Clay (Css, render)
+import Control.Applicative ((<|>))
 import Control.Monad (join, when)
 import qualified Data.Aeson as JSON
+import Data.Bifunctor (bimap)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.UTF8 as LUTF8
 import qualified Data.ByteString.UTF8 as UTF8
-import Data.List (partition)
+import Data.List (partition, sortBy)
 import Data.Monoid
 import Data.Pool (Pool)
-import Data.String (IsString)
+import Data.String (IsString, fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
@@ -23,7 +25,8 @@ import qualified Database.Persist.Postgresql as DB
 import Database.Persist.Postgresql ((==.))
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
-import Text.Blaze.Html5 (Html, h1, p, a, (!), text)
+import Text.Blaze.Html5 (Html, (!))
+import qualified Text.Blaze.Html5 as H
 import Text.Blaze.Html5.Attributes (href)
 import Text.Blaze.Html.Renderer.Utf8 (renderHtml)
 import qualified Text.Email.Validate as Email
@@ -36,6 +39,7 @@ import ReadView (
     emailRegistrationEmailAddress,
     EntityField(EmailRegistrationId, EmailRegistrationVerified))
 import qualified Templates
+import Router
 import Middleware (replaceHeaders)
 
 
@@ -178,24 +182,24 @@ interestedResource actor store name req sendResponse =
         return . not . Text.null . usEmailAddress
     verErrHtml =
       Templates.page ("Verification Failure") (Just notificationCss) $ do
-        h1 $ "Verification failed"
-        p $ do
+        H.h1 $ "Verification failed"
+        H.p $ do
           "We didn't recognise your verification link. "
           "Links expire after 24 hours, but you can always "
-          a ! href "/interested" $ "resubmit"
+          H.a ! href "/interested" $ "resubmit"
           " your email address."
     genericErrHtml =
       Templates.page ("Unrecognised Link") (Just notificationCss) $ do
-        h1 $ "Unrecognised link"
-        p $ do
+        H.h1 $ "Unrecognised link"
+        H.p $ do
           "We didn't recognise the subscription link you visted. You can "
           "always try "
-          a ! href "/interested" $ "resubmitting"
+          H.a ! href "/interested" $ "resubmitting"
           " your email address."
-        p $ do
+        H.p $ do
           "If you need some help, get in touch at "
-          a ! href (mailto helpEmailAddress "Signup%20help") $
-            text helpEmailAddress
+          H.a ! href (mailto helpEmailAddress "Signup%20help") $
+            H.text helpEmailAddress
           "."
     mailto addr subj = "mailto:" <> addr <> "?Subject=" <> subj
 
@@ -217,3 +221,19 @@ templatedErrorTransform t response =
         (HTTP.hContentType, "text/html; charset=utf-8")
         regularHdrs
     html = t status $ fmap snd errMsgHdrs
+
+
+generatePreviews :: [(Text, Wai.Application)] -> (Text, Endpoint)
+generatePreviews pairs = ("previews", getEp menu <|> childEps children)
+  where
+    sorted = sortBy (\a1 a2 -> (fst a1) `compare` (fst a2)) pairs
+    menu = htmlResponse $ H.docTypeHtml $ do
+      H.head $ do
+        H.title $ "Preview Pages"
+      H.body $ do
+        H.ul $ mconcat links
+    sanitise = Text.toLower . Text.replace " " "_"
+    link t h = H.li $ H.a ! href (fromString . Text.unpack $ "previews/" <> h) $
+        H.text t
+    links = zipWith link (fst <$> sorted) (fst <$> children)
+    children = bimap sanitise getEp <$> sorted

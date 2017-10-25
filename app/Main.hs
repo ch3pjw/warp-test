@@ -97,7 +97,8 @@ root icp ir ig authMiddleware =
     , ("paul", getEp $ githubRedir "ch3pjw")
     , ("screen.css", getEp $ screenCss)
     , ("api", authMiddleware <$> childEps
-        [("interested", getEp ig)]
+        [ ("interested", getEp ig)
+        , previews]
       )
     , ("interested"
       , getEp interestedSubmissionGet <|>
@@ -105,3 +106,9 @@ root icp ir ig authMiddleware =
         childEp (getEp . ir)
       )
     ]
+  where
+    previews = generatePreviews
+      [ ("Verification sent", submissionResponse "name@example.com")
+      , ("Verified successully", verificationResponse)
+      , ("Unsubscribed successfully", unsubscriptionResponse)
+      ]
