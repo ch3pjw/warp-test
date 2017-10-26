@@ -5,6 +5,7 @@ module Lib where
 import Clay (Css, render)
 import Control.Applicative ((<|>))
 import Control.Monad (join, when)
+import Control.Monad.Identity
 import qualified Data.Aeson as JSON
 import Data.Bifunctor (bimap)
 import qualified Data.ByteString as BS
@@ -25,10 +26,10 @@ import qualified Database.Persist.Postgresql as DB
 import Database.Persist.Postgresql ((==.))
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
-import Text.Blaze.Html5 (Html, (!))
-import qualified Text.Blaze.Html5 as H
-import Text.Blaze.Html5.Attributes (href)
-import Text.Blaze.Html.Renderer.Utf8 (renderHtml)
+import Text.BlazeT.Html5 (HtmlT, (!))
+import qualified Text.BlazeT.Html5 as H
+import Text.BlazeT.Html5.Attributes (href)
+import Text.BlazeT.Renderer.Utf8 (renderHtml)
 import qualified Text.Email.Validate as Email
 
 import Css
@@ -41,6 +42,7 @@ import ReadView (
 import qualified Templates
 import Router
 import Middleware (replaceHeaders)
+import Templates (s)
 
 
 -- Redirect sub-application
@@ -82,10 +84,12 @@ textResponse' = respond CTPlainText
 textResponse :: LBS.ByteString -> Wai.Application
 textResponse = textResponse' HTTP.status200
 
-htmlResponse' :: HTTP.Status -> Html -> Wai.Application
-htmlResponse' status html = respond CTHtml status $ renderHtml html
+htmlResponse' :: HTTP.Status -> HtmlT IO () -> Wai.Application
+htmlResponse' status html req sendResponse = do
+    bs <- H.execWith renderHtml html
+    respond CTHtml status bs req sendResponse
 
-htmlResponse :: Html -> Wai.Application
+htmlResponse :: HtmlT IO () -> Wai.Application
 htmlResponse = htmlResponse' HTTP.status200
 
 cssResponse :: Css -> Wai.Application
@@ -184,20 +188,20 @@ interestedResource actor store name req sendResponse =
       Templates.page ("Verification Failure") (Just notificationCss) $ do
         H.h1 $ "Verification failed"
         H.p $ do
-          "We didn't recognise your verification link. "
-          "Links expire after 24 hours, but you can always "
+          s "We didn't recognise your verification link. "
+          s "Links expire after 24 hours, but you can always "
           H.a ! href "/interested" $ "resubmit"
           " your email address."
     genericErrHtml =
       Templates.page ("Unrecognised Link") (Just notificationCss) $ do
         H.h1 $ "Unrecognised link"
         H.p $ do
-          "We didn't recognise the subscription link you visted. You can "
-          "always try "
+          s "We didn't recognise the subscription link you visted. You can "
+          s "always try "
           H.a ! href "/interested" $ "resubmitting"
           " your email address."
         H.p $ do
-          "If you need some help, get in touch at "
+          s "If you need some help, get in touch at "
           H.a ! href (mailto helpEmailAddress "Signup%20help") $
             H.text helpEmailAddress
           "."
@@ -208,8 +212,9 @@ screenCss :: Wai.Application
 screenCss = cssResponse . flattenResponsive 600 $ mainLayout <> mainStyling
 
 
-templatedErrorTransform  ::
-  (HTTP.Status -> [BS.ByteString] -> Html) -> Wai.Response -> Wai.Response
+templatedErrorTransform
+  :: (HTTP.Status -> [BS.ByteString] -> HtmlT Identity ()) -> Wai.Response
+  -> Wai.Response
 templatedErrorTransform t response =
     Wai.responseLBS status newHdrs (renderHtml html)
   where

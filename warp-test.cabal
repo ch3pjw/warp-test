@@ -29,8 +29,7 @@ library
                      , aeson
                      , aeson-casing
                      , async
-                     , blaze-html
-                     , blaze-markup
+                     , blazeT
                      , bytestring
                      , clay
                      , cryptohash
