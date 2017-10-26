@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Registration
   ( condenseConsecutive
@@ -19,12 +22,16 @@ module Registration
   , timeStampedAction
   , getDatabaseConfig
   , untilNothing
+  , RegistrationConfig, rcDatabaseConfig, rcUuidSalt
   ) where
 
+import Prelude hiding (fail)
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Concurrent.STM (atomically)
 import Control.Exception (catch, SomeException)
-import Control.Monad
+import Control.Monad hiding (fail)
+import Control.Monad.Except (MonadError, throwError)
+import Control.Monad.Fail (MonadFail, fail)
 import Control.Monad.IO.Class
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Aeson.TH (deriveJSON)
@@ -40,6 +47,7 @@ import Data.Time.Clock (NominalDiffTime, secondsToDiffTime, addUTCTime)
 import Data.UUID (UUID)
 import qualified Data.UUID.V5 as UUIDv5
 import System.Environment (getEnv)
+import System.Envy (FromEnv, fromEnv, env)
 
 import Database.Persist.URL (fromDatabaseUrl)
 import qualified Database.Persist.Postgresql as DB
@@ -274,6 +282,31 @@ reactivelyRunAction a store waitUuid = untilNothing waitUuid (
     -- We catch any exception the action raises because it shouldn't be able
     -- to bring down the entire reaction loop:
     \u -> updateStore a store u `catch` (\(_ :: SomeException) -> return ()))
+
+
+newtype CanFail a = CanFail
+  { unCanFail :: Either String a
+  } deriving (Functor, Applicative, Monad, Show)
+
+instance MonadFail CanFail where
+  fail = CanFail . Left
+
+-- | Helper to turn a MonadFail into a ExceptT/MonadError
+f2e :: (MonadError String m) => CanFail a -> m a
+f2e = either throwError return . unCanFail
+
+
+data RegistrationConfig = RegistrationConfig
+  { rcDatabaseConfig :: DB.PostgresConf
+  , rcUuidSalt :: Text
+  } deriving (Show)
+
+instance FromEnv RegistrationConfig where
+    fromEnv = RegistrationConfig
+        <$> (
+          env "DATABASE_URL" >>=
+          f2e . \(s :: String) -> fromDatabaseUrl 1 s)
+        <*> env "REGISTRATION_UUID_SALT"
 
 
 getDatabaseConfig :: IO DB.PostgresConf

@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Mailer
-  ( MailerSettings(..)
-  , mailerSettingsFromEnv
+  ( SmtpSettings(..)
+  , generateEmail
   , mailer
   ) where
 
@@ -11,7 +11,7 @@ import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Format (format)
 import Data.UUID (UUID)
-import System.Environment (getEnv, lookupEnv)
+import System.Envy (FromEnv, fromEnv, env, envMaybe)
 
 import qualified Network.HaskellNet.SMTP.SSL as SMTP
 import qualified Network.Mail.Mime as Mime
@@ -19,61 +19,54 @@ import qualified Network.Mail.Mime as Mime
 import Registration (
   EmailType(..), UserEvent(Emailed), UserState(..), Store, condenseConsecutive,
   reactivelyRunAction, timeStampedAction)
+import Types (Password(..), EnvToggle(..))
+
+
+data SmtpSettings = SmtpSettings
+  { ssServer :: String
+  , ssUsername :: String
+  , ssPassword :: Password String
+  , ssSettings :: SMTP.Settings
+  } deriving (Show)
 
 -- FIXME: we could extend this not to assume a port or using TLS (c.f STARTTLS)
-data MailerSettings = MailerSettings
-  { msSmtpSslSettings :: SMTP.Settings
-  , msServer :: String
-  , msUsername :: String
-  , msPassword :: String
-  , msSenderAddress :: Mime.Address
-  , msVerifiationLinkFormatter :: LinkFormatter
-  , msUnsubscribeLinkFormatter :: LinkFormatter
-  }
+instance FromEnv SmtpSettings where
+    fromEnv = SmtpSettings
+        <$> env "SMTP_SERVER"
+        <*> env "SMTP_USERNAME"
+        <*> env "SMTP_PASSWORD"
+        <*> (envMaybe "SMTP_LOGGING" >>= return . maybe
+             (mkSmtpSettings False) (mkSmtpSettings . unEnvToggle))
+      where
+        mkSmtpSettings logging = SMTP.defaultSettingsSMTPSSL
+          { SMTP.sslLogToConsole = logging }
 
-instance Show MailerSettings where
-  show ms = (
-       "MailerSettings\n"
-    ++ "  { msSmtpSslSettings = " ++ show (msSmtpSslSettings ms) ++ "\n"
-    ++ "  { msServer = " ++ show (msServer ms) ++ "\n"
-    ++ "  { msUsername = " ++ show (msUsername ms) ++ "\n"
-    ++ "  { msPassword = ****\n"
-    ++ "  { msSenderAddress = " ++ show (msSenderAddress ms) ++ "\n")
+newtype SenderAddress = SenderAddress
+  { unSenderAddress :: Mime.Address
+  } deriving (Eq, Show)
+
+senderAddress :: Maybe Text -> Text -> SenderAddress
+senderAddress name addr = SenderAddress $ Mime.Address name addr
+
+instance FromEnv SenderAddress where
+    fromEnv = senderAddress
+        <$> envMaybe "MAILER_SENDER_NAME"
+        <*> env "MAILER_SENDER_ADDRESS"
 
 type LinkFormatter = UUID -> Text
 
 
-mailerSettingsFromEnv :: LinkFormatter -> LinkFormatter -> IO MailerSettings
-mailerSettingsFromEnv formatVLink formatULink =
-    buildEnv
-      <$> lookupEnv "SMTP_LOGGING"
-      <*> getEnv "SMTP_SERVER"
-      <*> getEnv "SMTP_USERNAME"
-      <*> getEnv "SMTP_PASSWORD"
-  where
-    buildEnv ml s u p = MailerSettings
-      { msSmtpSslSettings = SMTP.defaultSettingsSMTPSSL
-        { SMTP.sslLogToConsole = maybe False (not . null) ml }
-      , msServer = s
-      , msUsername = u
-      , msPassword = p
-      , msSenderAddress =
-          Mime.Address (Just "Concert") "noreply@concertdaw.co.uk"
-      , msVerifiationLinkFormatter = formatVLink
-      , msUnsubscribeLinkFormatter = formatULink
-      }
-
-
-sendEmails :: MailerSettings -> [Mime.Mail] -> IO ()
+sendEmails :: SmtpSettings -> [Mime.Mail] -> IO ()
 sendEmails _ [] = return ()
 sendEmails settings emails =
     SMTP.doSMTPSSLWithSettings
-      (msServer settings)
-      (msSmtpSslSettings settings) $ \conn -> do
+      (ssServer settings)
+      (ssSettings settings) $ \conn -> do
     authSuccess <- SMTP.authenticate
-      SMTP.LOGIN (msUsername settings) (msPassword settings) conn
+      SMTP.LOGIN (ssUsername settings) (unPassword $ ssPassword settings) conn
     if authSuccess
       then mapM_ (flip SMTP.sendMimeMail2 conn) emails
+      -- FIXME: fail?
       else putStrLn "SMTP: authentication error."
 
 
@@ -110,26 +103,30 @@ confirmationEmail from to unsubscribeLink =
       [unsubscribeLink]
 
 
-generateEmail :: MailerSettings -> UUID -> UserState -> EmailType -> Mime.Mail
-generateEmail settings uuid userState emailType =
+generateEmail
+  :: SenderAddress -> LinkFormatter -> LinkFormatter -> UUID -> UserState
+  -> EmailType -> Mime.Mail
+generateEmail senderAddr verifyLF unsubLF uuid userState emailType =
     case emailType of
       VerificationEmail -> verificationEmail from to vl ul
       ConfirmationEmail -> confirmationEmail from to ul
   where
     to = Mime.Address Nothing $ usEmailAddress userState
-    from = msSenderAddress settings
-    vl = msVerifiationLinkFormatter settings uuid
-    ul = msUnsubscribeLinkFormatter settings uuid
+    from = unSenderAddress senderAddr
+    vl = verifyLF uuid
+    ul = unsubLF uuid
 
 
-mailer :: MailerSettings -> Store -> IO (Maybe UUID) -> IO ()
-mailer settings = reactivelyRunAction
+mailer
+  :: (UUID -> UserState -> EmailType -> Mime.Mail) -> SmtpSettings -> Store
+  -> IO (Maybe UUID) -> IO ()
+mailer genEmail settings = reactivelyRunAction
     (timeStampedAction getCurrentTime action)
   where
     action uuid userState =
       let
         pending = condenseConsecutive $ usPendingEmails userState
-        emails = generateEmail settings uuid userState <$> pending
+        emails = genEmail uuid userState <$> pending
       in
         -- FIXME: sendEmails CAN FAIL! E.g. if the server is dead or we send an
         -- email to an invalid address. At the moment reactivelyRunAction will

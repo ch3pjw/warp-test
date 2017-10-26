@@ -24,6 +24,7 @@ library
                      , Registration
                      , Router
                      , Templates
+                     , Types
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , aeson-casing
@@ -35,6 +36,7 @@ library
                      , cryptohash
                      , datetime
                      , email-validate
+                     , envy
                      , eventful-core
                      , eventful-memory
                      , eventful-postgresql
@@ -43,12 +45,14 @@ library
                      , mime-mail
                      , mtl
                      , neat-interpolation
+                     , network-uri
                      , HaskellNet-SSL
                      , persistent-database-url
                      , persistent-postgresql
                      , persistent-template
                      , resource-pool
                      , stm
+                     , stringable
                      , time
                      , text
                      , text-format
@@ -69,6 +73,7 @@ executable warp-test-exe
                      , async
                      , bytestring
                      , datetime
+                     , envy
                      , monad-logger
                      , persistent-postgresql
                      , text
