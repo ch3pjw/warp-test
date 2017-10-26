@@ -26,6 +26,7 @@ import qualified Database.Persist.Postgresql as DB
 import Database.Persist.Postgresql ((==.))
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
+import qualified Network.Wai.Trans as Wai
 import Text.BlazeT.Html5 (HtmlT, (!))
 import qualified Text.BlazeT.Html5 as H
 import Text.BlazeT.Html5.Attributes (href)
@@ -73,7 +74,9 @@ ctString CTJson = "application/json; charset=utf-8"
 ctString CTHtml = "text/html; charset=utf-8"
 ctString CTCss = "text/css; charset=utf-8"
 
-respond :: ContentType -> HTTP.Status -> LBS.ByteString -> Wai.Application
+respond
+  :: (Monad m) => ContentType -> HTTP.Status -> LBS.ByteString
+  -> Wai.ApplicationT m
 respond contentType status body _ sendResponse =
     sendResponse $ Wai.responseLBS
       status [(HTTP.hContentType, ctString contentType)] body
@@ -84,12 +87,12 @@ textResponse' = respond CTPlainText
 textResponse :: LBS.ByteString -> Wai.Application
 textResponse = textResponse' HTTP.status200
 
-htmlResponse' :: HTTP.Status -> HtmlT IO () -> Wai.Application
+htmlResponse' :: (Monad m) => HTTP.Status -> HtmlT m () -> Wai.ApplicationT m
 htmlResponse' status html req sendResponse = do
     bs <- H.execWith renderHtml html
     respond CTHtml status bs req sendResponse
 
-htmlResponse :: HtmlT IO () -> Wai.Application
+htmlResponse :: (Monad m) => HtmlT m () -> Wai.ApplicationT m
 htmlResponse = htmlResponse' HTTP.status200
 
 cssResponse :: Css -> Wai.Application
