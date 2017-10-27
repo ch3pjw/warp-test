@@ -6,7 +6,6 @@ module Lib where
 import Clay (Css, render)
 import Control.Applicative ((<|>))
 import Control.Monad (join, when)
-import Control.Monad.Identity
 import Control.Monad.Reader.Class (MonadReader)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Aeson as JSON
@@ -46,7 +45,7 @@ import ReadView (
 import qualified Templates
 import Router
 import Middleware (replaceHeaders)
-import Templates (s)
+import Templates (s, StaticResources)
 
 
 -- Redirect sub-application
@@ -111,13 +110,14 @@ errorResponse status title msgs _ sendResponse =
   where
     headers = fmap ((,) "X-Error-Message") $ title : msgs
 
-interestedSubmissionGet :: (MonadReader Text m) => Wai.ApplicationT m
+interestedSubmissionGet :: (MonadReader StaticResources m) => Wai.ApplicationT m
 interestedSubmissionGet = htmlResponse $ Templates.emailSubmission False
 
 
 -- | This is posted by the web form
 interestedCollectionPost
-  :: (MonadReader Text m, MonadIO m) => Actor -> Store -> Wai.ApplicationT m
+  :: (MonadReader StaticResources m, MonadIO m)
+  => Actor -> Store -> Wai.ApplicationT m
 interestedCollectionPost actor store req sendResponse = do
     body <- liftIO $ Wai.strictRequestBody req
     let mUrlE = either (const Nothing) Just $
@@ -151,16 +151,17 @@ interestedCollectionGet pool req sendResponse = do
     req sendResponse
 
 
-submissionResponse :: (MonadReader Text m) => Text -> Wai.ApplicationT m
+submissionResponse
+  :: (MonadReader StaticResources m) => Text -> Wai.ApplicationT m
 submissionResponse email = htmlResponse $
   Templates.emailSubmissionConfirmation email
 
 
-unsubscriptionResponse :: (MonadReader Text m) => Wai.ApplicationT m
+unsubscriptionResponse :: (MonadReader StaticResources m) => Wai.ApplicationT m
 unsubscriptionResponse = htmlResponse Templates.emailUnsubscriptionConfirmation
 
 
-verificationResponse :: (MonadReader Text m) => Wai.ApplicationT m
+verificationResponse :: (MonadReader StaticResources m) => Wai.ApplicationT m
 verificationResponse = htmlResponse Templates.emailVerificationConfirmation
 
 
@@ -170,7 +171,7 @@ helpEmailAddress = "hello@concertdaw.co.uk"
 
 -- | This sets the users email to verified when they visit
 interestedResource
-  :: (MonadReader Text m, MonadIO m) => Actor -> Store -> Text
+  :: (MonadReader StaticResources m, MonadIO m) => Actor -> Store -> Text
   -> Wai.ApplicationT m
 interestedResource actor store name req sendResponse =
     go (getVerb req) (UUID.fromText name)

@@ -7,6 +7,7 @@ import Control.Concurrent.Async
 import Control.Applicative
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Monad.Logger (runNoLoggingT)
+import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Data.ByteString as BS
 import Data.DateTime (getCurrentTime)
 import Data.Monoid ((<>))
@@ -55,6 +56,7 @@ main = do
     smtpSettings <- decodeEnv'
     senderAddr <- decodeEnv'
     regConfig <- decodeEnv'
+    static <- decodeEnv'
 
     -- Do a bunch of initialisation:
     pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr $ rcDatabaseConfig regConfig) 2)
@@ -69,7 +71,8 @@ main = do
     let ir = interestedResource actor store
     let ig = interestedCollectionGet pool
     let errHandler = prettifyError' $ templatedErrorTransform errorTemplate
-    let app = wrapApp "foo" $ errHandler $ dispatch $ root icp ir ig (Wai.liftMiddleware (runReaderT' "bar") authMiddleware)
+    -- FIXME: runReaderT' for authMiddleware:
+    let app = wrapApp static $ errHandler $ dispatch $ root icp ir ig (Wai.liftMiddleware (runReaderT' static) authMiddleware)
     let genEmail = generateEmail senderAddr
           (formatVLink $ scDomain serverConfig)
           (formatULink $ scDomain serverConfig)
@@ -82,9 +85,8 @@ main = do
             then Warp.run (scPort serverConfig) app
             else Warp.run (scPort serverConfig) $ forceTls app
 
-wrapApp
-  :: Text -> Wai.ApplicationT (ReaderT Text IO) -> Wai.Application
-wrapApp t a = Wai.runApplicationT (flip runReaderT t) a
+wrapApp :: StaticResources -> Appy -> Wai.Application
+wrapApp static a = Wai.runApplicationT (flip runReaderT static) a
 
 
 decodeEnv' :: (FromEnv a) => IO a
@@ -114,7 +116,7 @@ buildAuth username password = basicAuth isAllowed "Concert API"
     p' = unPassword password
 
 
-type WebbyMonad = ReaderT Text IO
+type WebbyMonad = ReaderT StaticResources IO
 type Appy = Wai.ApplicationT WebbyMonad
 
 

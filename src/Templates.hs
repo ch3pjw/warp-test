@@ -20,10 +20,11 @@ import Network.URI (URI)
 import Text.BlazeT.Html5 as H
 import Text.BlazeT.Html5.Attributes hiding (id)
 import qualified Text.BlazeT.Html5.Attributes as A
-import Text.BlazeT.Internal (customParent, MarkupM)
+import Text.BlazeT.Internal (customParent, customAttribute, MarkupM)
 import System.Envy (FromEnv, fromEnv, env)
 
 import Css
+import Types ()
 
 id_ :: AttributeValue -> Attribute
 id_ = A.id
@@ -34,7 +35,20 @@ id_ = A.id
 s :: (Monad m) => String -> HtmlT m ()
 s = H.string
 
-emailSubmission :: (MonadReader Text m) => Bool -> HtmlT m ()
+data StaticResources = StaticResources
+  { logoUrl :: URI
+  , logoAndTextUrl :: URI
+  , faviconUrl :: URI
+  } deriving (Show)
+
+instance FromEnv StaticResources where
+    fromEnv = StaticResources
+      <$> env "LOGO_URL"
+      <*> env "LOGO_AND_TEXT_URL"
+      <*> env "FAVICON_URL"
+
+
+emailSubmission :: (MonadReader StaticResources m) => Bool -> HtmlT m ()
 emailSubmission emailError =
   page "Register Interest" (Just emailSubmissionCss) $ do
     div ! id_ "description" $ do
@@ -78,7 +92,8 @@ nbsp = preEscapedToHtml ("&nbsp;" :: Text)
 copy :: MarkupM ()
 copy = preEscapedToHtml ("&copy;" :: Text)
 
-emailSubmissionConfirmation :: (MonadReader Text m) => Text -> HtmlT m ()
+emailSubmissionConfirmation
+  :: (MonadReader StaticResources m) => Text -> HtmlT m ()
 emailSubmissionConfirmation email =
   page "Verification Sent" (Just notificationCss) $ do
     h1 "Please verify your address"
@@ -90,7 +105,7 @@ emailSubmissionConfirmation email =
       s "Please check your inbox and visit the link so that we can be sure it's "
       "okay to send you emails."
 
-emailVerificationConfirmation :: (MonadReader Text m) => HtmlT m ()
+emailVerificationConfirmation :: (MonadReader StaticResources m) => HtmlT m ()
 emailVerificationConfirmation =
   page "Registered" (Just notificationCss) $ do
     h1 "Registered!"
@@ -106,7 +121,7 @@ emailVerificationConfirmation =
       "."
 
 
-emailUnsubscriptionConfirmation :: (MonadReader Text m) => HtmlT m ()
+emailUnsubscriptionConfirmation :: (MonadReader StaticResources m) => HtmlT m ()
 emailUnsubscriptionConfirmation =
   page "Unsubscribed" (Just notificationCss) $ do
     h1 "Bye :-("
@@ -125,10 +140,15 @@ twitterLink = "https://twitter.com/@concertdaw"
 githubLink :: (IsString a) => a
 githubLink = "https://github.com/concert"
 
+showValue :: (Show a) => a -> AttributeValue
+showValue = stringValue . show
+
+srcset :: AttributeValue -> Attribute
+srcset = customAttribute "srcset"
 
 page
-  :: (MonadReader Text m) => Text -> Maybe ResponsiveCss -> HtmlT m ()
-  -> HtmlT m ()
+  :: (MonadReader StaticResources m) => Text -> Maybe ResponsiveCss
+  -> HtmlT m () -> HtmlT m ()
 page pageTitle pageCss pageContent = docTypeHtml $ do
     htmlHead
     body $ do
@@ -151,11 +171,13 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
         header ! id_ "header-wrapper" $ do
           div ! id_ "header" $ do
             a ! href "/" $ do
-              foo <- lift ask
-              p $ text foo
+              static <- lift ask
               picture $ do
-                source
-                img
+                -- FIXME: sneaky media query:
+                source ! media "(max-width: 600px)"
+                  ! srcset (showValue $ logoUrl static)
+                img ! src (showValue $ logoAndTextUrl static)
+                  ! alt "Concert Logo" ! id_ "main_logo" ! height "33"
             a ! href "/about" $ "About Us"
 
     contentWrapper =
@@ -179,7 +201,8 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
                    nbsp ["Concert", "Audio", "Technologies", "Limited"]
 
 errorTemplate
-  :: (MonadReader Text m) => HTTP.Status -> [BS.ByteString] -> HtmlT m ()
+  :: (MonadReader StaticResources m) => HTTP.Status -> [BS.ByteString]
+  -> HtmlT m ()
 errorTemplate status errMsgs =
   let
     sMsg = decodeUtf8 $ HTTP.statusMessage status
