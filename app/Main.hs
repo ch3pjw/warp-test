@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Main where
 
@@ -15,6 +16,7 @@ import qualified Data.UUID as UUID
 import qualified Database.Persist.Postgresql as DB
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
+import qualified Network.Wai.Trans as Wai
 import Network.Wai.Middleware.HttpAuth (basicAuth)
 import System.Envy (FromEnv, fromEnv, env, decodeEnv)
 
@@ -67,7 +69,7 @@ main = do
     let ir = interestedResource actor store
     let ig = interestedCollectionGet pool
     let errHandler = prettifyError' $ templatedErrorTransform errorTemplate
-    let app = errHandler $ dispatch $ root icp ir ig authMiddleware
+    let app = wrapApp "foo" $ errHandler $ dispatch $ root icp ir ig (Wai.liftMiddleware (runReaderT' "bar") authMiddleware)
     let genEmail = generateEmail senderAddr
           (formatVLink $ scDomain serverConfig)
           (formatULink $ scDomain serverConfig)
@@ -79,6 +81,10 @@ main = do
             if (scAllowInsecure serverConfig)
             then Warp.run (scPort serverConfig) app
             else Warp.run (scPort serverConfig) $ forceTls app
+
+wrapApp
+  :: Text -> Wai.ApplicationT (ReaderT Text IO) -> Wai.Application
+wrapApp t a = Wai.runApplicationT (flip runReaderT t) a
 
 
 decodeEnv' :: (FromEnv a) => IO a
@@ -108,9 +114,16 @@ buildAuth username password = basicAuth isAllowed "Concert API"
     p' = unPassword password
 
 
+type WebbyMonad = ReaderT Text IO
+type Appy = Wai.ApplicationT WebbyMonad
+
+
+runReaderT' :: r -> ReaderT r m a -> m a
+runReaderT' = flip runReaderT
+
 root
-  :: Wai.Application -> (Text -> Wai.Application) -> Wai.Application
-  -> Wai.Middleware -> Endpoint
+  :: Appy -> (Text -> Appy)
+  -> Appy -> Wai.MiddlewareT WebbyMonad -> Endpoint WebbyMonad
 root icp ir ig authMiddleware =
   getEp (redir "interested") <|>
   childEps

@@ -1,9 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Templates where
 
 import Prelude hiding (div)
 import Control.Monad
+import Control.Monad.Reader.Class (MonadReader, ask)
+import Control.Monad.Trans (lift)
 import qualified Clay
 import qualified Data.ByteString as BS
 import Data.Monoid
@@ -31,7 +34,7 @@ id_ = A.id
 s :: (Monad m) => String -> HtmlT m ()
 s = H.string
 
-emailSubmission :: (Monad m) => Bool -> HtmlT m ()
+emailSubmission :: (MonadReader Text m) => Bool -> HtmlT m ()
 emailSubmission emailError =
   page "Register Interest" (Just emailSubmissionCss) $ do
     div ! id_ "description" $ do
@@ -75,7 +78,7 @@ nbsp = preEscapedToHtml ("&nbsp;" :: Text)
 copy :: MarkupM ()
 copy = preEscapedToHtml ("&copy;" :: Text)
 
-emailSubmissionConfirmation :: (Monad m) => Text -> HtmlT m ()
+emailSubmissionConfirmation :: (MonadReader Text m) => Text -> HtmlT m ()
 emailSubmissionConfirmation email =
   page "Verification Sent" (Just notificationCss) $ do
     h1 "Please verify your address"
@@ -87,7 +90,7 @@ emailSubmissionConfirmation email =
       s "Please check your inbox and visit the link so that we can be sure it's "
       "okay to send you emails."
 
-emailVerificationConfirmation :: (Monad m) => HtmlT m ()
+emailVerificationConfirmation :: (MonadReader Text m) => HtmlT m ()
 emailVerificationConfirmation =
   page "Registered" (Just notificationCss) $ do
     h1 "Registered!"
@@ -103,7 +106,7 @@ emailVerificationConfirmation =
       "."
 
 
-emailUnsubscriptionConfirmation :: (Monad m) => HtmlT m ()
+emailUnsubscriptionConfirmation :: (MonadReader Text m) => HtmlT m ()
 emailUnsubscriptionConfirmation =
   page "Unsubscribed" (Just notificationCss) $ do
     h1 "Bye :-("
@@ -123,7 +126,9 @@ githubLink :: (IsString a) => a
 githubLink = "https://github.com/concert"
 
 
-page :: (Monad m) => Text -> Maybe ResponsiveCss -> HtmlT m () -> HtmlT m ()
+page
+  :: (MonadReader Text m) => Text -> Maybe ResponsiveCss -> HtmlT m ()
+  -> HtmlT m ()
 page pageTitle pageCss pageContent = docTypeHtml $ do
     htmlHead
     body $ do
@@ -146,6 +151,8 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
         header ! id_ "header-wrapper" $ do
           div ! id_ "header" $ do
             a ! href "/" $ do
+              foo <- lift ask
+              p $ text foo
               picture $ do
                 source
                 img
@@ -171,7 +178,8 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
                 intersperseM
                    nbsp ["Concert", "Audio", "Technologies", "Limited"]
 
-errorTemplate :: (Monad m) => HTTP.Status -> [BS.ByteString] -> HtmlT m ()
+errorTemplate
+  :: (MonadReader Text m) => HTTP.Status -> [BS.ByteString] -> HtmlT m ()
 errorTemplate status errMsgs =
   let
     sMsg = decodeUtf8 $ HTTP.statusMessage status

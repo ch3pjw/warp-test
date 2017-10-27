@@ -75,6 +75,7 @@ executable warp-test-exe
                      , datetime
                      , envy
                      , monad-logger
+                     , mtl
                      , persistent-postgresql
                      , text
                      , unagi-chan
@@ -82,6 +83,7 @@ executable warp-test-exe
                      , uuid
                      , wai
                      , wai-extra
+                     , wai-transformers
                      , warp
                      , warp-test
   default-language:    Haskell2010
