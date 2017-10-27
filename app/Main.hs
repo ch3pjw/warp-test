@@ -19,7 +19,7 @@ import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Trans as Wai
 import Network.Wai.Middleware.HttpAuth (basicAuth)
-import System.Envy (FromEnv, fromEnv, env, decodeEnv)
+import System.Envy (FromEnv, fromEnv, env, envMaybe, decodeEnv)
 
 import Registration
 import ReadView
@@ -44,7 +44,7 @@ data ServerConfig = ServerConfig
 instance FromEnv ServerConfig where
     fromEnv = ServerConfig
       <$> env "PORT"
-      <*> (unEnvToggle <$> env "ALLOW_INSECURE")
+      <*> (maybe False unEnvToggle <$> envMaybe "ALLOW_INSECURE")
       <*> env "DOMAIN"
       <*> env "REGISTRATION_USERNAME"
       <*> env "REGISTRATION_PASSWORD"
