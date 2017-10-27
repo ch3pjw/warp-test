@@ -162,6 +162,11 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
         meta ! name "viewport" ! content "width=device-width, initial-scale=1"
         H.title titleText
         link ! rel "stylesheet" ! href "/screen.css"
+        -- FIXME: regardless of injecting the location, we still kinda know
+        -- magically what type this will be. I don't know if that's an issue...
+        static <- lift ask
+        link ! rel "icon" ! type_ "image/svg+xml" ! size "any"
+          ! href (showValue $ faviconUrl static)
         maybe
           (return ())
           (H.style . text . toStrict . Clay.render . flattenResponsive 600)
