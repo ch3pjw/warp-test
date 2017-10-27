@@ -83,10 +83,15 @@ mainLayout =
       paddingTop $ px 20
       paddingBottom $ px 20
 
-    idRef "links" |> star ? do
+    ul # byId "links" ? do
+      padding' nil
+      margin' nil
+
+    idRef "links" ? li ? do
+      display inline
       marginLeft $ px 10
 
-    idRef "links" |> star # firstOfType ? do
+    idRef "links" ? li # firstOfType ? do
       marginLeft nil
 
   ) <> phoneCss (do
@@ -148,13 +153,14 @@ mainStyling = globalCss $ do
     idRef "header" ? a # hover ? do
       color recordRed
 
-    inputField <> submitButton ? do
+    textInput <> emailInput <> submitButton ? do
       margin'' (px 5) nil
       padding' $ px 10
       minWidth $ px 200
       borderRadius' $ px 5
+      fontSizeCustom smaller
 
-    inputField ? do
+    textInput <> emailInput ? do
       border solid (px 1) darkgray;
       backgroundColor offWhite
 
@@ -177,8 +183,12 @@ mainStyling = globalCss $ do
       "box-shadow" -: "0 0 5px #777777 inset"
 
     input # ".error" ? do
-      border solid (px 1) "#e82e1d"
+      border solid (px 1) recordRed
       backgroundColor $ hsl 5 85 98
+
+    label # ".error" ? do
+      color recordRed
+      fontSizeCustom smaller
 
     idRef "footer-wrapper" ? do
       backgroundColor $ grayish 238
@@ -202,8 +212,10 @@ mainStyling = globalCss $ do
     goGreenH = hsl 138 78 42
     goGreenH' = hsl 121 78 35
     recordRed = hsl 5 82 51
-    inputField = input # ("type" @= "text")
-    submitButton = input # ("type" @= "submit")
+    ip t = input # ("type" @= t)
+    textInput = ip "text"
+    emailInput = ip "email"
+    submitButton = ip "submit"
 
 
 emailSubmissionCss :: ResponsiveCss

@@ -7,6 +7,7 @@ import Control.Monad
 import qualified Clay
 import qualified Data.ByteString as BS
 import Data.Monoid
+import Data.String (IsString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
@@ -40,19 +41,24 @@ emailSubmission emailError =
         "Sign up to our pre-release mailing list to register interest in "
         "beta testing."
     H.form ! method "post" ! id_ "registration-form" $ do
-      H.label ! for "email" $ do
-        "Email"
       emailInput
-      input ! type_ "submit" ! value "Register interest"
+      input ! type_ "submit" ! value "Sign up for updates"
       aside $ do
         "We'll only contact you about service updates and the chance to "
-        "try out pre-release software"
+        "try out pre-release software."
   where
     emailInput' =
-        input ! type_ "text" ! name "email" ! placeholder "name@example.com"
+        input ! type_ "email" ! name "email" ! placeholder "name@example.com"
         ! autofocus "true" -- FIXME: is this right?
     emailInput =
-        if emailError then emailInput' ! class_ "error" else emailInput'
+        if emailError
+        then do
+          H.label ! for "email" ! class_ "error" $
+            "Please enter a valid email address"
+          emailInput' ! class_ "error"
+        else do
+          H.label ! for "email" $ "Email"
+          emailInput'
 
 nbsp :: MarkupM ()
 nbsp = preEscapedToHtml ("&nbsp;" :: Text)
@@ -63,27 +69,49 @@ copy = preEscapedToHtml ("&copy;" :: Text)
 emailSubmissionConfirmation :: Text -> Html
 emailSubmissionConfirmation email =
   page "Verification Sent" (Just notificationCss) $ do
-    h1 "Please Verify"
+    h1 "Please verify your address"
     p $ do
       "We sent a verification link to "
-      text email
-      ". Please check your inbox."
+      strong $ text email
+      "."
+    p $ do
+      "Please check your inbox and visit the link so that we can be sure it's "
+      "okay to send you emails."
 
 emailVerificationConfirmation :: Html
 emailVerificationConfirmation =
-  page "Regsitered" (Just notificationCss) $ do
-    h1 "Registered"
-    p "Thank you for verifying your email address."
+  page "Registered" (Just notificationCss) $ do
+    h1 "Registered!"
+    p "Thanks for verifying your address."
     p $ do
-      "We'll email you when we've got news about our software or when we're "
+      "We'll email you when we've got news about our software and when we're "
       "looking for beta testers."
+    p $ do
+      "In the meantime, you can "
+      a ! href blogLink $ "read our blog"
+      " or "
+      a ! href twitterLink $ "follow us on Twitter"
+      "."
+
 
 emailUnsubscriptionConfirmation :: Html
 emailUnsubscriptionConfirmation =
   page "Unsubscribed" (Just notificationCss) $ do
-    h1 "Thank you!"
-    p "Thanks for being interested in Concert."
-    p "We've removed your email address from our list. Sorry to see you go."
+    h1 "Bye :-("
+    p $ do
+      "We've removed your address from our mailing list. "
+      "Thanks for being interested in Concert."
+    p $ "Unsubscribed by mistake? "
+
+
+blogLink :: (IsString a) => a
+blogLink = "https://medium.com/@concertdaw"
+
+twitterLink :: (IsString a) => a
+twitterLink = "https://twitter.com/@concertdaw"
+
+githubLink :: (IsString a) => a
+githubLink = "https://github.com/concert"
 
 
 page :: Text -> Maybe ResponsiveCss -> Html -> Html
@@ -122,10 +150,10 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
     pageFooter =
         footer ! id_ "footer-wrapper" $ do
           div ! id_ "footer" $ do
-            div ! id_ "links" $ do
-              a ! href "https://medium.com/@concertdaw" $ "Blog"
-              a ! href "https://twitter.com/@concertdaw" $ "Twitter"
-              a ! href "https://github.com/concert" $ "Open" >> nbsp >> "Source"
+            ul ! id_ "links" $ do
+              li $ a ! href blogLink $ "Blog"
+              li $ a ! href twitterLink $ "Twitter"
+              li $ a ! href githubLink $ "Github"
             div ! id_ "copyright" $ do
               "Copyright "
               copy
