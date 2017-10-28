@@ -9,6 +9,7 @@ where
 import Control.Applicative
 import Data.Text (Text)
 import qualified Network.Wai as Wai
+import qualified Network.Wai.Trans as Wai
 import qualified Network.HTTP.Types as HTTP
 
 
@@ -78,49 +79,49 @@ instance Alternative Endpoint' where
       , epGetChild = epGetChild ep1 <|> epGetChild ep2}
 
 
-type Endpoint = Endpoint' Wai.Application
+type Endpoint m = Endpoint' (Wai.ApplicationT m)
 
 
 emptyResponse :: HTTP.Status -> Wai.Response
 emptyResponse s = Wai.responseBuilder s [] mempty
 
-methodNotAllowed :: Wai.Application
+methodNotAllowed :: (Monad m) => Wai.ApplicationT m
 methodNotAllowed _ sendResponse = sendResponse $ emptyResponse HTTP.status405
 
-notFound :: Wai.Application
+notFound :: (Monad m) => Wai.ApplicationT m
 notFound _ sendResponse = sendResponse $ emptyResponse HTTP.status404
 
 
-getEp :: Wai.Application -> Endpoint
+getEp :: (Monad m) => Wai.ApplicationT m -> Endpoint m
 getEp a = empty { epGet = Just a }
 
-headEp :: Wai.Application -> Endpoint
+headEp :: (Monad m) => Wai.ApplicationT m -> Endpoint m
 headEp a = empty { epHead = Just a }
 
-postEp :: Wai.Application -> Endpoint
+postEp :: (Monad m) => Wai.ApplicationT m -> Endpoint m
 postEp a = empty { epPost = Just a }
 
-putEp :: Wai.Application -> Endpoint
+putEp :: (Monad m) => Wai.ApplicationT m -> Endpoint m
 putEp a = empty { epPut = Just a }
 
-deleteEp :: Wai.Application -> Endpoint
+deleteEp :: (Monad m) => Wai.ApplicationT m -> Endpoint m
 deleteEp a = empty { epDelete = Just a }
 
-optionsEp :: Wai.Application -> Endpoint
+optionsEp :: (Monad m) => Wai.ApplicationT m -> Endpoint m
 optionsEp a = empty { epOptions = Just a }
 
-patchEp :: Wai.Application -> Endpoint
+patchEp :: (Monad m) => Wai.ApplicationT m -> Endpoint m
 patchEp a = empty { epPatch = Just a }
 
-childEp :: (Text -> Endpoint) -> Endpoint
+childEp :: (Monad m) => (Text -> Endpoint m) -> Endpoint m
 childEp f = empty { epGetChild = Just f }
 
-childEps :: [(Text, Endpoint)] -> Endpoint
+childEps :: (Monad m) => [(Text, Endpoint m)] -> Endpoint m
 childEps eps = empty
   { epGetChild = Just $ \t -> maybe notFoundEp id $ lookup t eps }
 
 
-getEpApp :: HTTP.Method -> Endpoint -> Maybe Wai.Application
+getEpApp :: (Monad m) => HTTP.Method -> Endpoint m -> Maybe (Wai.ApplicationT m)
 getEpApp method ep
   | method == HTTP.methodGet = epGet ep
   | method == HTTP.methodPost = epPost ep
@@ -132,16 +133,16 @@ getEpApp method ep
   | otherwise = pure methodNotAllowed
 
 
-notFoundEp :: Endpoint
+notFoundEp :: (Monad m) => Endpoint m
 notFoundEp = pure notFound
 
 
 type Path = [Text]
 
-dispatch :: Endpoint -> Wai.Application
+dispatch :: (Monad m) => Endpoint m -> Wai.ApplicationT m
 dispatch ep req = handler (Wai.pathInfo req) ep req
   where
-    handler :: Path -> Endpoint -> Wai.Application
+    handler :: (Monad m) => Path -> Endpoint m -> Wai.ApplicationT m
     handler [] ep' =
       maybe methodNotAllowed id (getEpApp (Wai.requestMethod req) ep')
     handler (name:names) ep' =

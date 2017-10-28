@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Main where
 
@@ -6,6 +7,7 @@ import Control.Concurrent.Async
 import Control.Applicative
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Monad.Logger (runNoLoggingT)
+import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Data.ByteString as BS
 import Data.DateTime (getCurrentTime)
 import Data.Monoid ((<>))
@@ -15,8 +17,9 @@ import qualified Data.UUID as UUID
 import qualified Database.Persist.Postgresql as DB
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
+import qualified Network.Wai.Trans as Wai
 import Network.Wai.Middleware.HttpAuth (basicAuth)
-import System.Envy (FromEnv, fromEnv, env, decodeEnv)
+import System.Envy (FromEnv, fromEnv, env, envMaybe, decodeEnv)
 
 import Registration
 import ReadView
@@ -41,7 +44,7 @@ data ServerConfig = ServerConfig
 instance FromEnv ServerConfig where
     fromEnv = ServerConfig
       <$> env "PORT"
-      <*> (unEnvToggle <$> env "ALLOW_INSECURE")
+      <*> (maybe False unEnvToggle <$> envMaybe "ALLOW_INSECURE")
       <*> env "DOMAIN"
       <*> env "REGISTRATION_USERNAME"
       <*> env "REGISTRATION_PASSWORD"
@@ -53,6 +56,7 @@ main = do
     smtpSettings <- decodeEnv'
     senderAddr <- decodeEnv'
     regConfig <- decodeEnv'
+    static <- decodeEnv'
 
     -- Do a bunch of initialisation:
     pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr $ rcDatabaseConfig regConfig) 2)
@@ -67,7 +71,8 @@ main = do
     let ir = interestedResource actor store
     let ig = interestedCollectionGet pool
     let errHandler = prettifyError' $ templatedErrorTransform errorTemplate
-    let app = errHandler $ dispatch $ root icp ir ig authMiddleware
+    -- FIXME: runReaderT' for authMiddleware:
+    let app = wrapApp static $ errHandler $ dispatch $ root icp ir ig (Wai.liftMiddleware (runReaderT' static) authMiddleware)
     let genEmail = generateEmail senderAddr
           (formatVLink $ scDomain serverConfig)
           (formatULink $ scDomain serverConfig)
@@ -79,6 +84,9 @@ main = do
             if (scAllowInsecure serverConfig)
             then Warp.run (scPort serverConfig) app
             else Warp.run (scPort serverConfig) $ forceTls app
+
+wrapApp :: StaticResources -> Appy -> Wai.Application
+wrapApp static a = Wai.runApplicationT (flip runReaderT static) a
 
 
 decodeEnv' :: (FromEnv a) => IO a
@@ -108,9 +116,16 @@ buildAuth username password = basicAuth isAllowed "Concert API"
     p' = unPassword password
 
 
+type WebbyMonad = ReaderT StaticResources IO
+type Appy = Wai.ApplicationT WebbyMonad
+
+
+runReaderT' :: r -> ReaderT r m a -> m a
+runReaderT' = flip runReaderT
+
 root
-  :: Wai.Application -> (Text -> Wai.Application) -> Wai.Application
-  -> Wai.Middleware -> Endpoint
+  :: Appy -> (Text -> Appy)
+  -> Appy -> Wai.MiddlewareT WebbyMonad -> Endpoint WebbyMonad
 root icp ir ig authMiddleware =
   getEp (redir "interested") <|>
   childEps

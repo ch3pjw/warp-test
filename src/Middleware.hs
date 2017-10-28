@@ -9,6 +9,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Monoid
 import qualified Network.Wai as Wai
+import qualified Network.Wai.Trans as Wai
 import qualified Network.HTTP.Types as HTTP
 
 hasHttpsHeader :: HTTP.RequestHeaders -> Bool
@@ -45,17 +46,24 @@ replaceHeaders h@(hName, _) = (h:) . filter (\(n, _) -> n /= hName)
 
 
 -- | Error prettifying middleware
-prettifyError :: Wai.Middleware
+prettifyError :: (Monad m) => Wai.MiddlewareT m
 prettifyError = prettifyError' simpleErrorTransform
 
 
-prettifyError' :: (Wai.Response -> Wai.Response) -> Wai.Middleware
-prettifyError' errorTransform = Wai.modifyResponse f
+-- | Similar to Wai.modifyResponse, but works in the transformer stack
+modifyResponse
+  :: (Monad m) => (Wai.Response -> m Wai.Response) -> Wai.MiddlewareT m
+modifyResponse f app req sendResponse = app req $ \r -> f r >>= sendResponse
+
+
+prettifyError'
+  :: (Monad m) => (Wai.Response -> m Wai.Response) -> Wai.MiddlewareT m
+prettifyError' errorTransform = modifyResponse f
   where
     f response =
       if shouldTransform response
       then errorTransform response
-      else response
+      else return response
     statusIsError =
       liftM2 (||) HTTP.statusIsClientError HTTP.statusIsServerError
     shouldTransform response =
@@ -63,12 +71,12 @@ prettifyError' errorTransform = Wai.modifyResponse f
       && not (hasHeader HTTP.hContentType (Wai.responseHeaders response))
 
 
-simpleErrorTransform :: Wai.Response -> Wai.Response
+simpleErrorTransform :: (Monad m) => Wai.Response -> m Wai.Response
 simpleErrorTransform response =
   -- FIXME: this should probably do something smarter. It could combine
   -- the response body with a template?
   let status = Wai.responseStatus response in
-  Wai.responseLBS
+  return $ Wai.responseLBS
     status
     (replaceHeaders (HTTP.hContentType, "text/plain") $
      Wai.responseHeaders response)

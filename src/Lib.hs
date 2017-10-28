@@ -1,10 +1,13 @@
 {-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Lib where
 
 import Clay (Css, render)
 import Control.Applicative ((<|>))
 import Control.Monad (join, when)
+import Control.Monad.Reader.Class (MonadReader)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Aeson as JSON
 import Data.Bifunctor (bimap)
 import qualified Data.ByteString as BS
@@ -25,10 +28,11 @@ import qualified Database.Persist.Postgresql as DB
 import Database.Persist.Postgresql ((==.))
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
-import Text.Blaze.Html5 (Html, (!))
-import qualified Text.Blaze.Html5 as H
-import Text.Blaze.Html5.Attributes (href)
-import Text.Blaze.Html.Renderer.Utf8 (renderHtml)
+import qualified Network.Wai.Trans as Wai
+import Text.BlazeT.Html5 (HtmlT, (!))
+import qualified Text.BlazeT.Html5 as H
+import Text.BlazeT.Html5.Attributes (href)
+import Text.BlazeT.Renderer.Utf8 (renderHtml)
 import qualified Text.Email.Validate as Email
 
 import Css
@@ -41,16 +45,17 @@ import ReadView (
 import qualified Templates
 import Router
 import Middleware (replaceHeaders)
+import Templates (s, StaticResources)
 
 
 -- Redirect sub-application
 
-redir :: BS.ByteString -> Wai.Application
+redir :: (Monad m) => BS.ByteString -> Wai.ApplicationT m
 redir url _ sendResponse =
     sendResponse $ Wai.responseBuilder
       HTTP.status307 [(HTTP.hLocation, url)] mempty
 
-githubRedir :: BS.ByteString -> Wai.Application
+githubRedir :: (Monad m) => BS.ByteString -> Wai.ApplicationT m
 githubRedir user = redir $ "https://github.com/" <> user
 
 
@@ -71,7 +76,9 @@ ctString CTJson = "application/json; charset=utf-8"
 ctString CTHtml = "text/html; charset=utf-8"
 ctString CTCss = "text/css; charset=utf-8"
 
-respond :: ContentType -> HTTP.Status -> LBS.ByteString -> Wai.Application
+respond
+  :: (Monad m) => ContentType -> HTTP.Status -> LBS.ByteString
+  -> Wai.ApplicationT m
 respond contentType status body _ sendResponse =
     sendResponse $ Wai.responseLBS
       status [(HTTP.hContentType, ctString contentType)] body
@@ -82,16 +89,18 @@ textResponse' = respond CTPlainText
 textResponse :: LBS.ByteString -> Wai.Application
 textResponse = textResponse' HTTP.status200
 
-htmlResponse' :: HTTP.Status -> Html -> Wai.Application
-htmlResponse' status html = respond CTHtml status $ renderHtml html
+htmlResponse' :: (Monad m) => HTTP.Status -> HtmlT m () -> Wai.ApplicationT m
+htmlResponse' status html req sendResponse = do
+    bs <- H.execWith renderHtml html
+    respond CTHtml status bs req sendResponse
 
-htmlResponse :: Html -> Wai.Application
+htmlResponse :: (Monad m) => HtmlT m () -> Wai.ApplicationT m
 htmlResponse = htmlResponse' HTTP.status200
 
-cssResponse :: Css -> Wai.Application
+cssResponse :: (Monad m) => Css -> Wai.ApplicationT m
 cssResponse css = respond CTCss HTTP.status200 (encodeUtf8 $ render css)
 
-jsonResponse :: (JSON.ToJSON a) => a -> Wai.Application
+jsonResponse :: (Monad m, JSON.ToJSON a) => a -> Wai.ApplicationT m
 jsonResponse x = respond CTJson HTTP.status200 (JSON.encode x)
 
 errorResponse
@@ -101,14 +110,16 @@ errorResponse status title msgs _ sendResponse =
   where
     headers = fmap ((,) "X-Error-Message") $ title : msgs
 
-interestedSubmissionGet :: Wai.Application
+interestedSubmissionGet :: (MonadReader StaticResources m) => Wai.ApplicationT m
 interestedSubmissionGet = htmlResponse $ Templates.emailSubmission False
 
 
 -- | This is posted by the web form
-interestedCollectionPost :: Actor -> Store -> Wai.Application
+interestedCollectionPost
+  :: (MonadReader StaticResources m, MonadIO m)
+  => Actor -> Store -> Wai.ApplicationT m
 interestedCollectionPost actor store req sendResponse = do
-    body <- Wai.strictRequestBody req
+    body <- liftIO $ Wai.strictRequestBody req
     let mUrlE = either (const Nothing) Just $
           UrlE.importString $ LUTF8.toString body
     -- FIXME: validation should occur somewhere in between request handling and
@@ -119,7 +130,7 @@ interestedCollectionPost actor store req sendResponse = do
           >>= Email.canonicalizeEmail . UTF8.fromString
     case mEmail of
       (Just canonical) -> do
-            aSubmitEmailAddress actor store $ decodeUtf8 canonical
+            liftIO $ aSubmitEmailAddress actor store $ decodeUtf8 canonical
             submissionResponse (decodeUtf8 canonical) req sendResponse
       Nothing ->
         htmlResponse' HTTP.status400 (Templates.emailSubmission True)
@@ -127,9 +138,10 @@ interestedCollectionPost actor store req sendResponse = do
 
 
 -- | This is used by us to get all the email addresses out
-interestedCollectionGet :: Pool DB.SqlBackend -> Wai.Application
+interestedCollectionGet
+  :: (MonadIO m) => Pool DB.SqlBackend -> Wai.ApplicationT m
 interestedCollectionGet pool req sendResponse = do
-  entities <- DB.runSqlPool
+  entities <- liftIO $ DB.runSqlPool
       (DB.selectList
          [EmailRegistrationVerified ==. True]
          [DB.Asc EmailRegistrationId])
@@ -139,16 +151,17 @@ interestedCollectionGet pool req sendResponse = do
     req sendResponse
 
 
-submissionResponse :: Text -> Wai.Application
+submissionResponse
+  :: (MonadReader StaticResources m) => Text -> Wai.ApplicationT m
 submissionResponse email = htmlResponse $
   Templates.emailSubmissionConfirmation email
 
 
-unsubscriptionResponse :: Wai.Application
+unsubscriptionResponse :: (MonadReader StaticResources m) => Wai.ApplicationT m
 unsubscriptionResponse = htmlResponse Templates.emailUnsubscriptionConfirmation
 
 
-verificationResponse :: Wai.Application
+verificationResponse :: (MonadReader StaticResources m) => Wai.ApplicationT m
 verificationResponse = htmlResponse Templates.emailVerificationConfirmation
 
 
@@ -157,20 +170,24 @@ helpEmailAddress :: (IsString a) => a
 helpEmailAddress = "hello@concertdaw.co.uk"
 
 -- | This sets the users email to verified when they visit
-interestedResource :: Actor -> Store -> Text -> Wai.Application
+interestedResource
+  :: (MonadReader StaticResources m, MonadIO m) => Actor -> Store -> Text
+  -> Wai.ApplicationT m
 interestedResource actor store name req sendResponse =
     go (getVerb req) (UUID.fromText name)
   where
     go (Just "verify") (Just uuid) = do
         present <- hasEmail uuid
         if present
-        then aVerify actor store uuid >> verificationResponse req sendResponse
+        then do
+          liftIO $ aVerify actor store uuid
+          verificationResponse req sendResponse
         else htmlResponse' HTTP.status404 verErrHtml req sendResponse
     go (Just "verify") Nothing =
         htmlResponse' HTTP.status404 verErrHtml req sendResponse
     go (Just "unsubscribe") (Just uuid) = do
         present <- hasEmail uuid
-        when present $ aUnsubscribe actor store uuid
+        when present $ liftIO $ aUnsubscribe actor store uuid
         unsubscriptionResponse req sendResponse
     go (Just "unsubscribe") Nothing = unsubscriptionResponse req sendResponse
     go _ Nothing = htmlResponse' HTTP.status404 genericErrHtml req sendResponse
@@ -178,40 +195,41 @@ interestedResource actor store name req sendResponse =
     getVerb = join . lookup "action" . HTTP.queryToQueryText . Wai.queryString
     -- FIXME: this poll is a bit of a hack; when we have a read view, we should
     -- really be querying that.
-    hasEmail uuid = sPoll store uuid >>=
+    hasEmail uuid = liftIO (sPoll store uuid) >>=
         return . not . Text.null . usEmailAddress
     verErrHtml =
       Templates.page ("Verification Failure") (Just notificationCss) $ do
         H.h1 $ "Verification failed"
         H.p $ do
-          "We didn't recognise your verification link. "
-          "Links expire after 24 hours, but you can always "
+          s "We didn't recognise your verification link. "
+          s "Links expire after 24 hours, but you can always "
           H.a ! href "/interested" $ "resubmit"
           " your email address."
     genericErrHtml =
       Templates.page ("Unrecognised Link") (Just notificationCss) $ do
         H.h1 $ "Unrecognised link"
         H.p $ do
-          "We didn't recognise the subscription link you visted. You can "
-          "always try "
+          s "We didn't recognise the subscription link you visted. You can "
+          s "always try "
           H.a ! href "/interested" $ "resubmitting"
           " your email address."
         H.p $ do
-          "If you need some help, get in touch at "
+          s "If you need some help, get in touch at "
           H.a ! href (mailto helpEmailAddress "Signup%20help") $
             H.text helpEmailAddress
           "."
     mailto addr subj = "mailto:" <> addr <> "?Subject=" <> subj
 
 
-screenCss :: Wai.Application
+screenCss :: (Monad m) => Wai.ApplicationT m
 screenCss = cssResponse . flattenResponsive 600 $ mainLayout <> mainStyling
 
 
-templatedErrorTransform  ::
-  (HTTP.Status -> [BS.ByteString] -> Html) -> Wai.Response -> Wai.Response
+templatedErrorTransform
+  :: (Monad m) => (HTTP.Status -> [BS.ByteString] -> HtmlT m ()) -> Wai.Response
+  -> m Wai.Response
 templatedErrorTransform t response =
-    Wai.responseLBS status newHdrs (renderHtml html)
+    Wai.responseLBS status newHdrs <$> H.execWith renderHtml html
   where
     status = Wai.responseStatus response
     (errMsgHdrs, regularHdrs) =
@@ -223,7 +241,8 @@ templatedErrorTransform t response =
     html = t status $ fmap snd errMsgHdrs
 
 
-generatePreviews :: [(Text, Wai.Application)] -> (Text, Endpoint)
+generatePreviews
+  :: (Monad m) => [(Text, Wai.ApplicationT m)] -> (Text, Endpoint m)
 generatePreviews pairs = ("previews", getEp menu <|> childEps children)
   where
     sorted = sortBy (\a1 a2 -> (fst a1) `compare` (fst a2)) pairs

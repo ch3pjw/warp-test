@@ -29,8 +29,7 @@ library
                      , aeson
                      , aeson-casing
                      , async
-                     , blaze-html
-                     , blaze-markup
+                     , blazeT
                      , bytestring
                      , clay
                      , cryptohash
@@ -61,6 +60,7 @@ library
                      , utf8-string
                      , uuid
                      , wai
+                     , wai-transformers
                      , wai-extra
                      , warp
   default-language:    Haskell2010
@@ -75,6 +75,7 @@ executable warp-test-exe
                      , datetime
                      , envy
                      , monad-logger
+                     , mtl
                      , persistent-postgresql
                      , text
                      , unagi-chan
@@ -82,6 +83,7 @@ executable warp-test-exe
                      , uuid
                      , wai
                      , wai-extra
+                     , wai-transformers
                      , warp
                      , warp-test
   default-language:    Haskell2010
