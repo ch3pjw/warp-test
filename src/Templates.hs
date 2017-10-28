@@ -58,14 +58,22 @@ emailSubmission emailError =
         s "We're building tools to help you work on audio projects together "
         "across the internet."
       p $ do
+        "We're aiming to let you"
+      ul ! class_ "ul-ticks" $ do
+        li $ do
+          s "Control your session from multiple devices at"
+          nbsp
+          "once"
+        li $ "Invite other people to join your sessions live"
+        li $ "Track the changes everyone has made to a project."
+      p $ do
         s "Our software is "
         a ! href "https://github.com/concert" $ do
           "open source"
-        s " wherever possible so that you are free to use it however you "
-        "like and you'll always be able to access your data."
+        s " wherever possible so that you have a bigger say in how we grow."
       p $ do
-        s "Sign up to our pre-release mailing list to register interest in "
-        "beta testing."
+        s "Sound interesting? Sign up to our pre-release mailing list for "
+        "updates and beta testing opportunities."
     H.form ! method "post" ! id_ "registration-form" $ do
       emailInput
       input ! type_ "submit" ! value "Sign up for updates"

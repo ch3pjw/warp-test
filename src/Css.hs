@@ -94,6 +94,25 @@ mainLayout =
     idRef "links" ? li # firstOfType ? do
       marginLeft nil
 
+    p |+ ul ? do
+      marginTop $ px (-18)
+
+    ul # ".ul-ticks" ? do
+      "list-style" -: "none"
+      paddingLeft $ px 10
+
+
+    ".ul-ticks" ? li ? do
+      -- FIXME: this is annoying as we can't change the color of the icon :-(
+      -- FIXME: it may be wise to take a copy of these and host ourselves :-)
+      backgroundImage $ url "https://feathericons.com/node_modules/feather-icons/dist/icons/check.svg"
+      backgroundRepeat noRepeat
+      backgroundPosition $ positioned (px 0) (px 5)
+      backgroundSize $ px 20 `by` px 20
+      paddingLeft $ px 28
+      paddingTop $ px 3
+
+
   ) <> phoneCss (do
       body ? do
         fontSize $ pct 120
