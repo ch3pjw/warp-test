@@ -173,12 +173,11 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
         header ! id_ "header-wrapper" $ do
           div ! id_ "header" $ do
             a ! href "/" $ do
-              let logo = object ! alt "Concert Logo" ! height "33"
               static <- lift ask
-              logo ! data_ (showValue $ logoUrl static)
-                ! class_ "small-screen" $ return ()
-              logo ! data_ (showValue $ logoAndTextUrl static)
-                ! class_ "large-screen" $ return ()
+              object ! height "33" ! data_ (showValue $ logoUrl static)
+                ! class_ "small-screen" ! alt "Concert Logo" $ "Concert Logo"
+              object ! height "33" ! data_ (showValue $ logoAndTextUrl static)
+                ! class_ "large-screen" ! alt "Concert Logo" $ "Concert Logo"
             a ! href "/about" $ "About Us"
 
     contentWrapper =
