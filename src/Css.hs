@@ -123,7 +123,7 @@ mainLayout =
 
 
 mainStyling :: ResponsiveCss
-mainStyling = globalCss $ do
+mainStyling = globalCss (do
     importUrl $
          "https://fonts.googleapis.com/css?family"
          <> "=Source+Sans+Pro:300,400,500,700"
@@ -204,6 +204,13 @@ mainStyling = globalCss $ do
 
     idRef "footer" ? a # hover ? do
       color recordRed
+  ) <> phoneCss (do
+    ".large-screen" ? do
+      display none
+  ) <> largeCss (do
+    ".small-screen" ? do
+      display none
+  )
   where
     offBlack = hsl 300 22 10
     offWhite = hsl 0 0 98

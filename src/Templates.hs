@@ -20,7 +20,7 @@ import Network.URI (URI)
 import Text.BlazeT.Html5 as H
 import Text.BlazeT.Html5.Attributes hiding (id)
 import qualified Text.BlazeT.Html5.Attributes as A
-import Text.BlazeT.Internal (customParent, customAttribute, MarkupM)
+import Text.BlazeT.Internal (MarkupM)
 import System.Envy (FromEnv, fromEnv, env)
 
 import Css
@@ -143,9 +143,6 @@ githubLink = "https://github.com/concert"
 showValue :: (Show a) => a -> AttributeValue
 showValue = stringValue . show
 
-srcset :: AttributeValue -> Attribute
-srcset = customAttribute "srcset"
-
 page
   :: (MonadReader StaticResources m) => Text -> Maybe ResponsiveCss
   -> HtmlT m () -> HtmlT m ()
@@ -176,13 +173,12 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
         header ! id_ "header-wrapper" $ do
           div ! id_ "header" $ do
             a ! href "/" $ do
+              let logo = object ! alt "Concert Logo" ! height "33"
               static <- lift ask
-              picture $ do
-                -- FIXME: sneaky media query:
-                source ! media "(max-width: 600px)"
-                  ! srcset (showValue $ logoUrl static)
-                img ! src (showValue $ logoAndTextUrl static)
-                  ! alt "Concert Logo" ! id_ "main_logo" ! height "33"
+              logo ! data_ (showValue $ logoUrl static)
+                ! class_ "small-screen" $ return ()
+              logo ! data_ (showValue $ logoAndTextUrl static)
+                ! class_ "large-screen" $ return ()
             a ! href "/about" $ "About Us"
 
     contentWrapper =
@@ -222,9 +218,6 @@ errorTemplate status errMsgs =
 
 pretty404 :: (Monad m) => HtmlT m ()
 pretty404 = undefined
-
-picture :: (Monad m) => HtmlT m () -> HtmlT m ()
-picture = customParent "picture"
 
 intersperseM :: (Monad m) => m a -> [m a] -> m ()
 intersperseM _ [] = return ()
