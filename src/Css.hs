@@ -127,7 +127,7 @@ mainStyling :: ResponsiveCss
 mainStyling = globalCss (do
     importUrl $
          "https://fonts.googleapis.com/css?family"
-         <> "=Source+Sans+Pro:300,400,500,700"
+         <> "=Source+Sans+Pro:300,400,400i,500,700"
          <> "|Raleway:400,500"
 
     body ? do
@@ -288,6 +288,9 @@ padding' x = key "padding" x
 
 padding'' :: Size a -> Size a -> Css
 padding'' y x = key "padding" (y ! x)
+
+hPadding :: Size a -> Css
+hPadding x = paddingLeft x >> paddingRight x
 
 margin' :: Size a -> Css
 margin' x = key "margin" x
