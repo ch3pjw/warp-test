@@ -58,7 +58,7 @@ emailSubmission emailError =
         s "We're building tools to help you work on audio projects together "
         "across the internet."
       p $ do
-        "We're aiming to let you"
+        "We're aiming to let you:"
       ul ! class_ "ul-ticks" $ do
         li $ do
           s "Control your session from multiple devices at"
@@ -70,7 +70,7 @@ emailSubmission emailError =
         s "Our software is "
         a ! href "https://github.com/concert" $ do
           "open source"
-        s " wherever possible so that you have a bigger say in how we grow."
+        s " wherever possible so that you have a bigger say in how it grows."
       p $ do
         s "Sound interesting? Sign up to our pre-release mailing list for "
         "updates and beta testing opportunities."
