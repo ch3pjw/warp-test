@@ -198,7 +198,8 @@ interestedResource actor store name req sendResponse =
     hasEmail uuid = liftIO (sPoll store uuid) >>=
         return . not . Text.null . usEmailAddress
     verErrHtml =
-      Templates.page ("Verification Failure") (Just notificationCss) $ do
+      Templates.page ("Verification Failure") (Just notificationCss)
+      Nothing $ do
         H.h1 $ "Verification failed"
         H.p $ do
           s "We didn't recognise your verification link. "
@@ -206,7 +207,7 @@ interestedResource actor store name req sendResponse =
           H.a ! href "/interested" $ "resubmit"
           " your email address."
     genericErrHtml =
-      Templates.page ("Unrecognised Link") (Just notificationCss) $ do
+      Templates.page ("Unrecognised Link") (Just notificationCss) Nothing $ do
         H.h1 $ "Unrecognised link"
         H.p $ do
           s "We didn't recognise the subscription link you visted. You can "

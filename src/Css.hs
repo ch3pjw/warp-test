@@ -84,35 +84,16 @@ mainLayout =
       paddingTop $ px 20
       paddingBottom $ px 20
 
-    ul # byId "links" ? do
+    ul # byId "nav" ? do
       padding' nil
       margin' nil
 
-    idRef "links" ? li ? do
+    idRef "nav" ? li ? do
       display inline
       marginLeft $ px 10
 
-    idRef "links" ? li # firstOfType ? do
+    idRef "nav" ? li # firstOfType ? do
       marginLeft nil
-
-    p |+ ul ? do
-      marginTop $ px (-18)
-
-    ul # ".ul-ticks" ? do
-      "list-style" -: "none"
-      paddingLeft $ px 10
-
-
-    ".ul-ticks" ? li ? do
-      -- FIXME: this is annoying as we can't change the color of the icon :-(
-      -- FIXME: it may be wise to take a copy of these and host ourselves :-)
-      backgroundImage $ url "https://feathericons.com/node_modules/feather-icons/dist/icons/check.svg"
-      backgroundRepeat noRepeat
-      backgroundPosition $ positioned (px 0) (px 5)
-      backgroundSize $ px 20 `by` px 20
-      paddingLeft $ px 28
-      paddingTop $ px 3
-
 
   ) <> phoneCss (do
       body ? do
@@ -127,14 +108,14 @@ mainLayout =
       idRef "copyright" ? do
         order 2
 
-      idRef "links" ? do
+      idRef "nav" ? do
         order 1
 
   ) <> largeCss (do
       idRef "copyright" ? do
         order 1
 
-      idRef "links" ? do
+      idRef "nav" ? do
         order 2
   )
 
@@ -162,7 +143,7 @@ mainStyling = globalCss (do
       fontSizeCustom smaller
       color $ grayish 153
 
-    a # href # hover ? do
+    (a # href # hover <> a # href # active) ? do
       color recordRed
 
     idRef "header" ? a ? do
@@ -170,7 +151,7 @@ mainStyling = globalCss (do
       color inherit
       fontWeight $ weight 500
 
-    idRef "header" ? a # hover ? do
+    idRef "header" ? (a # hover <> a # ".active") ? do
       color recordRed
 
     textInput <> emailInput <> submitButton ? do
@@ -209,6 +190,23 @@ mainStyling = globalCss (do
     label # ".error" ? do
       color recordRed
       fontSizeCustom smaller
+
+    p |+ ul ? do
+      marginTop $ px (-18)
+
+    ul # ".ul-ticks" ? do
+      "list-style" -: "none"
+      paddingLeft $ px 10
+
+    ".ul-ticks" ? li ? do
+      -- FIXME: this is annoying as we can't change the color of the icon :-(
+      -- FIXME: it may be wise to take a copy of these and host ourselves :-)
+      backgroundImage $ url "https://feathericons.com/node_modules/feather-icons/dist/icons/check.svg"
+      backgroundRepeat noRepeat
+      backgroundPosition $ positioned (px 0) (px 5)
+      backgroundSize $ px 20 `by` px 20
+      paddingLeft $ px 28
+      paddingTop $ px 3
 
     idRef "footer-wrapper" ? do
       backgroundColor $ grayish 238

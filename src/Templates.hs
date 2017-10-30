@@ -50,7 +50,7 @@ instance FromEnv StaticResources where
 
 emailSubmission :: (MonadReader StaticResources m) => Bool -> HtmlT m ()
 emailSubmission emailError =
-  page "Register Interest" (Just emailSubmissionCss) $ do
+  page "Register Interest" (Just emailSubmissionCss) Nothing $ do
     div ! id_ "description" $ do
       h1 $ do
         "Collaborative Audio Production"
@@ -104,7 +104,7 @@ mdash = preEscapedToHtml ("&mdash;" :: Text)
 emailSubmissionConfirmation
   :: (MonadReader StaticResources m) => Text -> HtmlT m ()
 emailSubmissionConfirmation email =
-  page "Verification Sent" (Just notificationCss) $ do
+  page "Verification Sent" (Just notificationCss) Nothing $ do
     h1 "Please verify your address"
     p $ do
       s "We sent a verification link to "
@@ -116,7 +116,7 @@ emailSubmissionConfirmation email =
 
 emailVerificationConfirmation :: (MonadReader StaticResources m) => HtmlT m ()
 emailVerificationConfirmation =
-  page "Registered" (Just notificationCss) $ do
+  page "Registered" (Just notificationCss) Nothing $ do
     h1 "Registered!"
     p "Thanks for verifying your address."
     p $ do
@@ -132,7 +132,7 @@ emailVerificationConfirmation =
 
 emailUnsubscriptionConfirmation :: (MonadReader StaticResources m) => HtmlT m ()
 emailUnsubscriptionConfirmation =
-  page "Unsubscribed" (Just notificationCss) $ do
+  page "Unsubscribed" (Just notificationCss) Nothing $ do
     h1 "Bye :-("
     p $ do
       s "We've removed your address from our mailing list. "
@@ -152,10 +152,21 @@ githubLink = "https://github.com/concert"
 showValue :: (Show a) => a -> AttributeValue
 showValue = stringValue . show
 
+data NavBarItem = AboutUs deriving (Enum, Eq, Show)
+
+navBar :: (Monad m) => Maybe NavBarItem -> HtmlT m ()
+navBar active = ul ! id_ "nav" $ mapM_ f [(AboutUs, "/about", "About Us")]
+  where
+    f (x, h, t)
+     | (Just x) == active = li $ a ! href h ! class_ "active" $ t
+     | otherwise = li $ a ! href h $ t
+
+
 page
-  :: (MonadReader StaticResources m) => Text -> Maybe ResponsiveCss
+  :: (MonadReader StaticResources m)
+  => Text -> Maybe ResponsiveCss -> Maybe NavBarItem
   -> HtmlT m () -> HtmlT m ()
-page pageTitle pageCss pageContent = docTypeHtml $ do
+page pageTitle pageCss activeNavBarItem pageContent = docTypeHtml $ do
     htmlHead
     body $ do
       pageHeader
@@ -187,7 +198,7 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
                 ! class_ "small-screen" ! alt "Concert Logo" $ "Concert Logo"
               object ! height "33" ! data_ (showValue $ logoAndTextUrl static)
                 ! class_ "large-screen" ! alt "Concert Logo" $ "Concert Logo"
-            a ! href "/about" $ "About Us"
+            navBar activeNavBarItem
 
     contentWrapper =
         div ! id_ "content-wrapper" $ do
@@ -197,7 +208,7 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
     pageFooter =
         footer ! id_ "footer-wrapper" $ do
           div ! id_ "footer" $ do
-            ul ! id_ "links" $ do
+            ul ! id_ "nav" $ do
               li $ a ! href blogLink $ "Blog"
               li $ a ! href twitterLink $ "Twitter"
               li $ a ! href githubLink $ "Github"
@@ -218,8 +229,8 @@ errorTemplate status errMsgs =
     errMsgs' = fmap decodeUtf8 errMsgs
   in
     case errMsgs' of
-      [] -> page sMsg (Just notificationCss) $ h1 (text sMsg)
-      (m:ms) -> page m (Just notificationCss) $ do
+      [] -> page sMsg (Just notificationCss) Nothing $ h1 (text sMsg)
+      (m:ms) -> page m (Just notificationCss) Nothing $ do
         h1 $ text m
         mapM_ (p . text) ms
 
