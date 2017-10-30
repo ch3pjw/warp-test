@@ -140,6 +140,11 @@ emailUnsubscriptionConfirmation =
     p $ "Unsubscribed by mistake? "
 
 
+
+mailto :: (Monad m) => Text -> Text -> HtmlT m ()
+mailto addr subj = a ! href mkHref $ text addr
+  where
+    mkHref = textValue $ "mailto:" <> addr <> "?Subject=" <> subj
 blogLink :: (IsString a) => a
 blogLink = "https://medium.com/@concertdaw"
 
