@@ -94,11 +94,12 @@ emailSubmission emailError =
           H.label ! for "email" $ "Email"
           emailInput'
 
-nbsp :: MarkupM ()
-nbsp = preEscapedToHtml ("&nbsp;" :: Text)
-
-copy :: MarkupM ()
+copy, nbsp, ndash, mdash :: MarkupM ()
 copy = preEscapedToHtml ("&copy;" :: Text)
+nbsp = preEscapedToHtml ("&nbsp;" :: Text)
+ndash = preEscapedToHtml ("&ndash;" :: Text)
+mdash = preEscapedToHtml ("&mdash;" :: Text)
+
 
 emailSubmissionConfirmation
   :: (MonadReader StaticResources m) => Text -> HtmlT m ()
