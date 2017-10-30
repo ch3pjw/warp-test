@@ -143,6 +143,11 @@ mainStyling = globalCss (do
       fontSizeCustom smaller
       color $ grayish 153
 
+    -- So that the whole area of the Concert logo is clickable
+    -- Also doesn't upset adblock :-)
+    object ? do
+      pointerEvents none
+
     (a # href # hover <> a # href # active) ? do
       color recordRed
 
