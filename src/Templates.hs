@@ -5,9 +5,11 @@ module Templates where
 
 import Prelude hiding (div)
 import Control.Monad
+import Control.Monad.Except (throwError)
 import Control.Monad.Reader.Class (MonadReader, ask)
 import Control.Monad.Trans (lift)
 import qualified Clay
+import qualified Data.Aeson as Json
 import qualified Data.ByteString as BS
 import Data.Monoid
 import Data.String (IsString)
@@ -39,6 +41,8 @@ data StaticResources = StaticResources
   { logoUrl :: URI
   , logoAndTextUrl :: URI
   , faviconUrl :: URI
+  , companyAddress :: [Text]
+  , companyNumber :: Text
   } deriving (Show)
 
 instance FromEnv StaticResources where
@@ -46,6 +50,15 @@ instance FromEnv StaticResources where
       <$> env "LOGO_URL"
       <*> env "LOGO_AND_TEXT_URL"
       <*> env "FAVICON_URL"
+      <*> envEither "COMPANY_ADDRESS"
+      <*> env "COMPANY_NUMBER"
+
+
+-- FIXME: this lacks an accompanying signature because I can't get at Envy's
+-- Parser
+envEither str =
+    env str >>=
+    either (throwError . (\e -> str ++ ": " ++ e)) return . Json.eitherDecode
 
 
 emailSubmission :: (MonadReader StaticResources m) => Bool -> HtmlT m ()
@@ -140,6 +153,33 @@ emailUnsubscriptionConfirmation =
     p $ "Unsubscribed by mistake? "
 
 
+companyInfo :: (MonadReader StaticResources m) => HtmlT m ()
+companyInfo =
+    page "Company Information" (Just $ notificationCss <> css) Nothing $ do
+      h1 "Company information"
+      static <- lift ask
+      p $ do
+        em "Concert Audio Technologies Limited"
+        s " is company number "
+        text $ companyNumber static
+        s " registered in England and Wales."
+      p $ do
+        s "It's run by "
+        a ! href "/about" $ do
+          "actual human beings"
+        s ", who are friendly and would love to talk to you."
+      p $ do
+        s "The best way to reach us is by emailing "
+        mailto "hello@concertdaw.co.uk" "Hello Concert"
+        s ". However, in physical space you can reach us at the following "
+        "postal address:"
+      div ! id_ "company-address" $ do
+        mapM_ line $ companyAddress static
+  where
+    line t = text t >> br
+    css = globalCss $ do
+      "#company-address" ? do
+        C.paddingLeft $ C.em 1.5
 
 mailto :: (Monad m) => Text -> Text -> HtmlT m ()
 mailto addr subj = a ! href mkHref $ text addr
