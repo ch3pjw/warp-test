@@ -8,7 +8,8 @@ import Control.Monad
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader.Class (MonadReader, ask)
 import Control.Monad.Trans (lift)
-import qualified Clay
+import Clay ((?), (-:))
+import qualified Clay as C
 import qualified Data.Aeson as Json
 import qualified Data.ByteString as BS
 import Data.Monoid
@@ -41,6 +42,8 @@ data StaticResources = StaticResources
   { logoUrl :: URI
   , logoAndTextUrl :: URI
   , faviconUrl :: URI
+  , davePic :: URI
+  , paulPic :: URI
   , companyAddress :: [Text]
   , companyNumber :: Text
   } deriving (Show)
@@ -50,6 +53,8 @@ instance FromEnv StaticResources where
       <$> env "LOGO_URL"
       <*> env "LOGO_AND_TEXT_URL"
       <*> env "FAVICON_URL"
+      <*> env "DAVE_PROFILE_PIC_URL"
+      <*> env "PAUL_PROFILE_PIC_URL"
       <*> envEither "COMPANY_ADDRESS"
       <*> env "COMPANY_NUMBER"
 
@@ -185,6 +190,84 @@ mailto :: (Monad m) => Text -> Text -> HtmlT m ()
 mailto addr subj = a ! href mkHref $ text addr
   where
     mkHref = textValue $ "mailto:" <> addr <> "?Subject=" <> subj
+
+aboutUs :: (MonadReader StaticResources m) => HtmlT m ()
+aboutUs =
+    page "About us" (Just css) (Just AboutUs) $ do
+      h1 "Hello, we're Concert"
+      div ! id_ "about-profiles" $ do
+        static <- lift ask
+        div ! id_ "dave" ! class_ "about-profile" $ do
+          a ! href "https://github.com/foolswood"
+              ! class_ "profile-pic-cont" $ do
+            img ! src (showValue $ davePic static) ! class_ "about-profile-pic"
+              ! alt "David Honour"
+            h2 $ "David Honour"
+          p ! class_ "personal-email" $
+            mailto "david@concertdaw.co.uk" "Hi David"
+          p $ do
+            s "David is a multi-instrumentalist and music producer who happens "
+            s "to have trained as a physicist and works as a software "
+            s "engineer."
+          p $ do
+            s "He loves working on low-level realtime systems, "
+            s "distributed systems and network protocols "
+            mdash
+            s " so it's no wonder that he's the mastermind behind our "
+            s "networked, distributed audio production system."
+
+        div ! id_ "paul" ! class_ "about-profile" $ do
+          a ! href "https://github.com/ch3pjw" ! class_ "profile-pic-cont" $ do
+            img ! src (showValue $ paulPic static) ! class_ "about-profile-pic"
+              ! alt "Paul Weaver"
+            h2 $ "Paul Weaver"
+          p ! class_ "personal-email" $
+            mailto "paul@concertdaw.co.uk" "Hi Paul"
+          p $ do
+            s "Paul did a PhD in computational chemistry before realising that "
+            s "his real passion was software engineering."
+          p $ do
+            s "He loves turning big, abstract ideas into usable, rock-solid "
+            s "bits of software. He's also a musican and composer, so Concert "
+            s "is the perfect setting to combine all his interests."
+  where
+    css = globalCss (do
+        C.h1 ? do
+          C.fontSize $ C.em 2.5
+        "#about-profiles" ? do
+          C.display C.grid
+        -- ".about-profile" ? do
+        --   C.width $ C.pct 100
+        ".profile-pic-cont" ? do
+          C.textDecoration C.none
+          C.color C.inherit
+        ".about-profile-pic" ? do
+          borderRadius' $ C.pct 50
+          C.width $ C.pct 75
+          C.display C.block
+          hMargin C.auto
+        ".about-profile" ? C.h2 ? do
+          C.textAlign C.center
+          C.fontWeight $ C.weight 400
+        ".personal-email" ? do
+          C.fontSizeCustom C.smaller
+          C.textAlign C.center
+          C.marginTop $ C.px (-20)
+        ".personal-email" ? C.a ? do
+          C.color C.gray
+          C.textDecoration C.none
+      ) <> phoneCss (do
+        "#about-profiles" ? do
+          "grid-template-columns" -: "auto"
+      ) <> largeCss (do
+        "#content" ? do
+          padding' $ C.px 75
+        "#about-profiles" ? do
+          "grid-template-columns" -: "50% 50%"
+          "grid-column-gap" -: "50px"
+      )
+
+
 blogLink :: (IsString a) => a
 blogLink = "https://medium.com/@concertdaw"
 
@@ -231,7 +314,7 @@ page pageTitle pageCss activeNavBarItem pageContent = docTypeHtml $ do
           ! href (showValue $ faviconUrl static)
         maybe
           (return ())
-          (H.style . text . toStrict . Clay.render . flattenResponsive 600)
+          (H.style . text . toStrict . C.render . flattenResponsive 600)
           pageCss
 
     pageHeader =
