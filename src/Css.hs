@@ -58,6 +58,7 @@ mainLayout =
       margin' nil
       -- Otherwise Firefox won't run the footer to the bottom:
       height $ pct 100
+      backgroundColor white
 
     body |> star |> C.div ? do
       maxWidth $ px 820
