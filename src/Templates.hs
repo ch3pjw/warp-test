@@ -5,9 +5,13 @@ module Templates where
 
 import Prelude hiding (div)
 import Control.Monad
+import Control.Monad.Except (throwError)
 import Control.Monad.Reader.Class (MonadReader, ask)
 import Control.Monad.Trans (lift)
-import qualified Clay
+import Clay ((?), (-:))
+import qualified Clay as C
+import qualified Clay.Flexbox as Fb
+import qualified Data.Aeson as Json
 import qualified Data.ByteString as BS
 import Data.Monoid
 import Data.String (IsString)
@@ -20,7 +24,7 @@ import Network.URI (URI)
 import Text.BlazeT.Html5 as H
 import Text.BlazeT.Html5.Attributes hiding (id)
 import qualified Text.BlazeT.Html5.Attributes as A
-import Text.BlazeT.Internal (customParent, customAttribute, MarkupM)
+import Text.BlazeT.Internal (MarkupM)
 import System.Envy (FromEnv, fromEnv, env)
 
 import Css
@@ -39,6 +43,10 @@ data StaticResources = StaticResources
   { logoUrl :: URI
   , logoAndTextUrl :: URI
   , faviconUrl :: URI
+  , davePic :: URI
+  , paulPic :: URI
+  , companyAddress :: [Text]
+  , companyNumber :: Text
   } deriving (Show)
 
 instance FromEnv StaticResources where
@@ -46,32 +54,52 @@ instance FromEnv StaticResources where
       <$> env "LOGO_URL"
       <*> env "LOGO_AND_TEXT_URL"
       <*> env "FAVICON_URL"
+      <*> env "DAVE_PROFILE_PIC_URL"
+      <*> env "PAUL_PROFILE_PIC_URL"
+      <*> envJson "COMPANY_ADDRESS"
+      <*> env "COMPANY_NUMBER"
+
+
+-- FIXME: this lacks an accompanying signature because I can't get at Envy's
+-- Parser
+envJson str =
+    env str >>=
+    either (throwError . (\e -> str ++ ": " ++ e)) return . Json.eitherDecode
 
 
 emailSubmission :: (MonadReader StaticResources m) => Bool -> HtmlT m ()
 emailSubmission emailError =
-  page "Register Interest" (Just emailSubmissionCss) $ do
-    div ! id_ "description" $ do
-      h1 $ do
-        "Collaborative Audio Production"
-      p $ do
-        s "We're building tools to help you work on audio projects together "
-        "across the internet."
-      p $ do
-        s "Our software is "
-        a ! href "https://github.com/concert" $ do
-          "open source"
-        s " wherever possible so that you are free to use it however you "
-        "like and you'll always be able to access your data."
-      p $ do
-        s "Sign up to our pre-release mailing list to register interest in "
-        "beta testing."
-    H.form ! method "post" ! id_ "registration-form" $ do
-      emailInput
-      input ! type_ "submit" ! value "Sign up for updates"
-      aside $ do
-        s "We'll only contact you about service updates and the chance to "
-        "try out pre-release software."
+  page "Register Interest" (Just css) Nothing $ do
+    h1 $ do
+      "Introducing Collaborative Audio Production"
+    div ! id_ "grid" $ do
+      div ! id_ "description" $ do
+        p $ do
+          s "We're building tools to help you work on audio projects together "
+          "across the internet."
+        p $ do
+          "We're aiming to let you:"
+        ul ! class_ "ul-ticks" $ do
+          li $ do
+            s "Control your session from multiple devices at"
+            nbsp
+            "once"
+          li $ "Invite other people to join your sessions live"
+          li $ "Track the changes everyone has made to a project."
+        p $ do
+          s "Our software is "
+          a ! href "https://github.com/concert" $ do
+            "open source"
+          s " wherever possible so that you have a bigger say in how it grows."
+        p $ do
+          s "Sound interesting? Sign up to our pre-release mailing list for "
+          "updates and beta testing opportunities."
+      H.form ! method "post" ! id_ "registration-form" $ do
+        emailInput
+        input ! type_ "submit" ! value "Sign up for updates"
+        aside $ do
+          s "We'll only contact you about service updates and the chance to "
+          "try out pre-release software."
   where
     emailInput' =
         input ! type_ "email" ! name "email" ! placeholder "name@example.com"
@@ -85,17 +113,40 @@ emailSubmission emailError =
         else do
           H.label ! for "email" $ "Email"
           emailInput'
+    css = globalCss (do
+        "#grid" ? do
+          C.display C.grid
 
-nbsp :: MarkupM ()
-nbsp = preEscapedToHtml ("&nbsp;" :: Text)
+        "#registration-form" ? do
+          C.alignSelf C.center
 
-copy :: MarkupM ()
+        C.form ? do
+          C.display C.flex
+          C.flexFlow Fb.column Fb.nowrap
+      ) <> phoneCss (do
+          "#grid" ? do
+            "grid-template-columns" -: "auto"
+            "grid-row-gap" -: "20 px"
+      ) <> largeCss (do
+          "#grid" ? do
+            "grid-template-columns" -: "60% 40%"
+            "grid-column-gap" -: "50px"
+          "#content" ? do
+            padding' $ C.px 75
+      )
+
+
+copy, nbsp, ndash, mdash :: MarkupM ()
 copy = preEscapedToHtml ("&copy;" :: Text)
+nbsp = preEscapedToHtml ("&nbsp;" :: Text)
+ndash = preEscapedToHtml ("&ndash;" :: Text)
+mdash = preEscapedToHtml ("&mdash;" :: Text)
+
 
 emailSubmissionConfirmation
   :: (MonadReader StaticResources m) => Text -> HtmlT m ()
 emailSubmissionConfirmation email =
-  page "Verification Sent" (Just notificationCss) $ do
+  page "Verification Sent" (Just notificationCss) Nothing $ do
     h1 "Please verify your address"
     p $ do
       s "We sent a verification link to "
@@ -107,7 +158,7 @@ emailSubmissionConfirmation email =
 
 emailVerificationConfirmation :: (MonadReader StaticResources m) => HtmlT m ()
 emailVerificationConfirmation =
-  page "Registered" (Just notificationCss) $ do
+  page "Registered" (Just notificationCss) Nothing $ do
     h1 "Registered!"
     p "Thanks for verifying your address."
     p $ do
@@ -123,12 +174,120 @@ emailVerificationConfirmation =
 
 emailUnsubscriptionConfirmation :: (MonadReader StaticResources m) => HtmlT m ()
 emailUnsubscriptionConfirmation =
-  page "Unsubscribed" (Just notificationCss) $ do
+  page "Unsubscribed" (Just notificationCss) Nothing $ do
     h1 "Bye :-("
     p $ do
       s "We've removed your address from our mailing list. "
       "Thanks for being interested in Concert."
     p $ "Unsubscribed by mistake? "
+
+
+companyInfo :: (MonadReader StaticResources m) => HtmlT m ()
+companyInfo =
+    page "Company Information" (Just $ notificationCss <> css) Nothing $ do
+      h1 "Company information"
+      static <- lift ask
+      p $ do
+        em "Concert Audio Technologies Limited"
+        s " is company number "
+        text $ companyNumber static
+        s " registered in England and Wales."
+      p $ do
+        s "It's run by "
+        a ! href "/about" $ do
+          "actual human beings"
+        s ", who are friendly and would love to talk to you."
+      p $ do
+        s "The best way to reach us is by emailing "
+        mailto "hello@concertdaw.co.uk" "Hello Concert"
+        s ". However, in physical space you can reach us at the following "
+        "postal address:"
+      div ! id_ "company-address" $ do
+        mapM_ line $ companyAddress static
+  where
+    line t = text t >> br
+    css = globalCss $ do
+      "#company-address" ? do
+        C.paddingLeft $ C.em 1.5
+
+mailto :: (Monad m) => Text -> Text -> HtmlT m ()
+mailto addr subj = a ! href mkHref $ text addr
+  where
+    mkHref = textValue $ "mailto:" <> addr <> "?Subject=" <> subj
+
+aboutUs :: (MonadReader StaticResources m) => HtmlT m ()
+aboutUs =
+    page "About us" (Just css) (Just AboutUs) $ do
+      h1 "Hello, we're Concert"
+      div ! id_ "about-profiles" $ do
+        static <- lift ask
+        div ! id_ "dave" ! class_ "about-profile" $ do
+          a ! href "https://github.com/foolswood"
+              ! class_ "profile-pic-cont" $ do
+            img ! src (showValue $ davePic static) ! class_ "about-profile-pic"
+              ! alt "David Honour"
+            h2 $ "David Honour"
+          p ! class_ "personal-email" $
+            mailto "david@concertdaw.co.uk" "Hi David"
+          p $ do
+            s "David is a multi-instrumentalist and music producer who happens "
+            s "to have trained as a physicist and works as a software "
+            s "engineer."
+          p $ do
+            s "He loves working on low-level realtime systems, "
+            s "distributed systems and network protocols "
+            mdash
+            s " so it's no wonder that he's the mastermind behind our "
+            s "networked, distributed audio production system."
+
+        div ! id_ "paul" ! class_ "about-profile" $ do
+          a ! href "https://github.com/ch3pjw" ! class_ "profile-pic-cont" $ do
+            img ! src (showValue $ paulPic static) ! class_ "about-profile-pic"
+              ! alt "Paul Weaver"
+            h2 $ "Paul Weaver"
+          p ! class_ "personal-email" $
+            mailto "paul@concertdaw.co.uk" "Hi Paul"
+          p $ do
+            s "Paul did a PhD in computational chemistry before realising that "
+            s "his real passion was software engineering."
+          p $ do
+            s "He loves turning big, abstract ideas into usable, rock-solid "
+            s "bits of software. He's also a musican and composer, so Concert "
+            s "is the perfect setting to combine all his interests."
+  where
+    css = globalCss (do
+        C.h1 ? do
+          C.fontSize $ C.em 2.5
+        "#about-profiles" ? do
+          C.display C.grid
+        ".profile-pic-cont" ? do
+          C.textDecoration C.none
+          C.color C.inherit
+        ".about-profile-pic" ? do
+          borderRadius' $ C.pct 50
+          C.width $ C.pct 75
+          C.display C.block
+          hMargin C.auto
+        ".about-profile" ? C.h2 ? do
+          C.textAlign C.center
+          C.fontWeight $ C.weight 400
+        ".personal-email" ? do
+          C.fontSizeCustom C.smaller
+          C.textAlign C.center
+          C.marginTop $ C.px (-20)
+        ".personal-email" ? C.a ? do
+          C.color C.gray
+          C.textDecoration C.none
+      ) <> phoneCss (do
+        "#about-profiles" ? do
+          "grid-template-columns" -: "auto"
+      ) <> largeCss (do
+        "#content" ? do
+          padding' $ C.px 75
+        "#about-profiles" ? do
+          "grid-template-columns" -: "50% 50%"
+          "grid-column-gap" -: "50px"
+      )
 
 
 blogLink :: (IsString a) => a
@@ -143,13 +302,21 @@ githubLink = "https://github.com/concert"
 showValue :: (Show a) => a -> AttributeValue
 showValue = stringValue . show
 
-srcset :: AttributeValue -> Attribute
-srcset = customAttribute "srcset"
+data NavBarItem = AboutUs deriving (Enum, Eq, Show)
+
+navBar :: (Monad m) => Maybe NavBarItem -> HtmlT m ()
+navBar active = ul ! id_ "nav" $ mapM_ f [(AboutUs, "/about", "About Us")]
+  where
+    f (x, h, t)
+     | (Just x) == active = li $ a ! href h ! class_ "active" $ t
+     | otherwise = li $ a ! href h $ t
+
 
 page
-  :: (MonadReader StaticResources m) => Text -> Maybe ResponsiveCss
+  :: (MonadReader StaticResources m)
+  => Text -> Maybe ResponsiveCss -> Maybe NavBarItem
   -> HtmlT m () -> HtmlT m ()
-page pageTitle pageCss pageContent = docTypeHtml $ do
+page pageTitle pageCss activeNavBarItem pageContent = docTypeHtml $ do
     htmlHead
     body $ do
       pageHeader
@@ -169,7 +336,7 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
           ! href (showValue $ faviconUrl static)
         maybe
           (return ())
-          (H.style . text . toStrict . Clay.render . flattenResponsive 600)
+          (H.style . text . toStrict . C.render . flattenResponsive 600)
           pageCss
 
     pageHeader =
@@ -177,13 +344,16 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
           div ! id_ "header" $ do
             a ! href "/" $ do
               static <- lift ask
-              picture $ do
-                -- FIXME: sneaky media query:
-                source ! media "(max-width: 600px)"
-                  ! srcset (showValue $ logoUrl static)
-                img ! src (showValue $ logoAndTextUrl static)
-                  ! alt "Concert Logo" ! id_ "main_logo" ! height "33"
-            a ! href "/about" $ "About Us"
+              -- FIXME: For now, always display "Concert" with the logo. Later,
+              -- might want to do the following to compact just down to the logo
+              -- on smaller screens:
+              -- object ! height "33" ! data_ (showValue $ logoUrl static)
+              --   ! class_ "small-screen" ! alt "Concert Logo" $ "Concert Logo"
+              -- object ! height "33" ! data_ (showValue $ logoAndTextUrl static)
+              --   ! class_ "large-screen" ! alt "Concert Logo" $ "Concert Logo"
+              object ! height "33" ! data_ (showValue $ logoAndTextUrl static)
+                ! alt "Concert Logo" $ "Concert Logo"
+            navBar activeNavBarItem
 
     contentWrapper =
         div ! id_ "content-wrapper" $ do
@@ -193,7 +363,7 @@ page pageTitle pageCss pageContent = docTypeHtml $ do
     pageFooter =
         footer ! id_ "footer-wrapper" $ do
           div ! id_ "footer" $ do
-            ul ! id_ "links" $ do
+            ul ! id_ "nav" $ do
               li $ a ! href blogLink $ "Blog"
               li $ a ! href twitterLink $ "Twitter"
               li $ a ! href githubLink $ "Github"
@@ -214,17 +384,14 @@ errorTemplate status errMsgs =
     errMsgs' = fmap decodeUtf8 errMsgs
   in
     case errMsgs' of
-      [] -> page sMsg (Just notificationCss) $ h1 (text sMsg)
-      (m:ms) -> page m (Just notificationCss) $ do
+      [] -> page sMsg (Just notificationCss) Nothing $ h1 (text sMsg)
+      (m:ms) -> page m (Just notificationCss) Nothing $ do
         h1 $ text m
         mapM_ (p . text) ms
 
 
 pretty404 :: (Monad m) => HtmlT m ()
 pretty404 = undefined
-
-picture :: (Monad m) => HtmlT m () -> HtmlT m ()
-picture = customParent "picture"
 
 intersperseM :: (Monad m) => m a -> [m a] -> m ()
 intersperseM _ [] = return ()

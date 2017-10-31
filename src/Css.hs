@@ -58,6 +58,7 @@ mainLayout =
       margin' nil
       -- Otherwise Firefox won't run the footer to the bottom:
       height $ pct 100
+      backgroundColor white
 
     body |> star |> C.div ? do
       maxWidth $ px 820
@@ -83,15 +84,15 @@ mainLayout =
       paddingTop $ px 20
       paddingBottom $ px 20
 
-    ul # byId "links" ? do
+    ul # byId "nav" ? do
       padding' nil
       margin' nil
 
-    idRef "links" ? li ? do
+    idRef "nav" ? li ? do
       display inline
       marginLeft $ px 10
 
-    idRef "links" ? li # firstOfType ? do
+    idRef "nav" ? li # firstOfType ? do
       marginLeft nil
 
   ) <> phoneCss (do
@@ -107,14 +108,14 @@ mainLayout =
       idRef "copyright" ? do
         order 2
 
-      idRef "links" ? do
+      idRef "nav" ? do
         order 1
 
   ) <> largeCss (do
       idRef "copyright" ? do
         order 1
 
-      idRef "links" ? do
+      idRef "nav" ? do
         order 2
   )
 
@@ -123,10 +124,10 @@ mainLayout =
 
 
 mainStyling :: ResponsiveCss
-mainStyling = globalCss $ do
+mainStyling = globalCss (do
     importUrl $
          "https://fonts.googleapis.com/css?family"
-         <> "=Source+Sans+Pro:300,400,500,700"
+         <> "=Source+Sans+Pro:300,400,400i,500,700"
          <> "|Raleway:400,500"
 
     body ? do
@@ -142,7 +143,12 @@ mainStyling = globalCss $ do
       fontSizeCustom smaller
       color $ grayish 153
 
-    a # href # hover ? do
+    -- So that the whole area of the Concert logo is clickable
+    -- Also doesn't upset adblock :-)
+    object ? do
+      pointerEvents none
+
+    (a # href # hover <> a # href # active) ? do
       color recordRed
 
     idRef "header" ? a ? do
@@ -150,7 +156,7 @@ mainStyling = globalCss $ do
       color inherit
       fontWeight $ weight 500
 
-    idRef "header" ? a # hover ? do
+    idRef "header" ? (a # hover <> a # ".active") ? do
       color recordRed
 
     textInput <> emailInput <> submitButton ? do
@@ -190,6 +196,23 @@ mainStyling = globalCss $ do
       color recordRed
       fontSizeCustom smaller
 
+    p |+ ul ? do
+      marginTop $ px (-18)
+
+    ul # ".ul-ticks" ? do
+      "list-style" -: "none"
+      paddingLeft $ px 10
+
+    ".ul-ticks" ? li ? do
+      -- FIXME: this is annoying as we can't change the color of the icon :-(
+      -- FIXME: it may be wise to take a copy of these and host ourselves :-)
+      backgroundImage $ url "https://feathericons.com/node_modules/feather-icons/dist/icons/check.svg"
+      backgroundRepeat noRepeat
+      backgroundPosition $ positioned (px 0) (px 5)
+      backgroundSize $ px 20 `by` px 20
+      paddingLeft $ px 28
+      paddingTop $ px 3
+
     idRef "footer-wrapper" ? do
       backgroundColor $ grayish 238
       boxShadow nil nil (px 15) $ grayish 204
@@ -204,6 +227,13 @@ mainStyling = globalCss $ do
 
     idRef "footer" ? a # hover ? do
       color recordRed
+  ) <> phoneCss (do
+    ".large-screen" ? do
+      display none
+  ) <> largeCss (do
+    ".small-screen" ? do
+      display none
+  )
   where
     offBlack = hsl 300 22 10
     offWhite = hsl 0 0 98
@@ -258,6 +288,9 @@ padding' x = key "padding" x
 
 padding'' :: Size a -> Size a -> Css
 padding'' y x = key "padding" (y ! x)
+
+hPadding :: Size a -> Css
+hPadding x = paddingLeft x >> paddingRight x
 
 margin' :: Size a -> Css
 margin' x = key "margin" x
