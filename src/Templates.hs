@@ -10,6 +10,7 @@ import Control.Monad.Reader.Class (MonadReader, ask)
 import Control.Monad.Trans (lift)
 import Clay ((?), (-:))
 import qualified Clay as C
+import qualified Clay.Flexbox as Fb
 import qualified Data.Aeson as Json
 import qualified Data.ByteString as BS
 import Data.Monoid
@@ -68,7 +69,7 @@ envEither str =
 
 emailSubmission :: (MonadReader StaticResources m) => Bool -> HtmlT m ()
 emailSubmission emailError =
-  page "Register Interest" (Just emailSubmissionCss) Nothing $ do
+  page "Register Interest" (Just css) Nothing $ do
     div ! id_ "description" $ do
       h1 $ do
         "Collaborative Audio Production"
@@ -111,6 +112,27 @@ emailSubmission emailError =
         else do
           H.label ! for "email" $ "Email"
           emailInput'
+    css = globalCss (do
+        "#content" ? do
+          C.display C.grid
+
+        "#registration-form" ? do
+          C.alignSelf C.center
+
+        C.form ? do
+          C.display C.flex
+          C.flexFlow Fb.column Fb.nowrap
+      ) <> phoneCss (do
+          "#content" ? do
+            "grid-template-columns" -: "auto"
+            "grid-row-gap" -: "20 px"
+      ) <> largeCss (do
+          "#content" ? do
+            "grid-template-columns" -: "60% 40%"
+            "grid-column-gap" -: "50px"
+            padding' $ C.px 75
+      )
+
 
 copy, nbsp, ndash, mdash :: MarkupM ()
 copy = preEscapedToHtml ("&copy;" :: Text)
