@@ -70,35 +70,36 @@ envEither str =
 emailSubmission :: (MonadReader StaticResources m) => Bool -> HtmlT m ()
 emailSubmission emailError =
   page "Register Interest" (Just css) Nothing $ do
-    div ! id_ "description" $ do
-      h1 $ do
-        "Collaborative Audio Production"
-      p $ do
-        s "We're building tools to help you work on audio projects together "
-        "across the internet."
-      p $ do
-        "We're aiming to let you:"
-      ul ! class_ "ul-ticks" $ do
-        li $ do
-          s "Control your session from multiple devices at"
-          nbsp
-          "once"
-        li $ "Invite other people to join your sessions live"
-        li $ "Track the changes everyone has made to a project."
-      p $ do
-        s "Our software is "
-        a ! href "https://github.com/concert" $ do
-          "open source"
-        s " wherever possible so that you have a bigger say in how it grows."
-      p $ do
-        s "Sound interesting? Sign up to our pre-release mailing list for "
-        "updates and beta testing opportunities."
-    H.form ! method "post" ! id_ "registration-form" $ do
-      emailInput
-      input ! type_ "submit" ! value "Sign up for updates"
-      aside $ do
-        s "We'll only contact you about service updates and the chance to "
-        "try out pre-release software."
+    h1 $ do
+      "Introducing Collaborative Audio Production"
+    div ! id_ "grid" $ do
+      div ! id_ "description" $ do
+        p $ do
+          s "We're building tools to help you work on audio projects together "
+          "across the internet."
+        p $ do
+          "We're aiming to let you:"
+        ul ! class_ "ul-ticks" $ do
+          li $ do
+            s "Control your session from multiple devices at"
+            nbsp
+            "once"
+          li $ "Invite other people to join your sessions live"
+          li $ "Track the changes everyone has made to a project."
+        p $ do
+          s "Our software is "
+          a ! href "https://github.com/concert" $ do
+            "open source"
+          s " wherever possible so that you have a bigger say in how it grows."
+        p $ do
+          s "Sound interesting? Sign up to our pre-release mailing list for "
+          "updates and beta testing opportunities."
+      H.form ! method "post" ! id_ "registration-form" $ do
+        emailInput
+        input ! type_ "submit" ! value "Sign up for updates"
+        aside $ do
+          s "We'll only contact you about service updates and the chance to "
+          "try out pre-release software."
   where
     emailInput' =
         input ! type_ "email" ! name "email" ! placeholder "name@example.com"
@@ -113,7 +114,7 @@ emailSubmission emailError =
           H.label ! for "email" $ "Email"
           emailInput'
     css = globalCss (do
-        "#content" ? do
+        "#grid" ? do
           C.display C.grid
 
         "#registration-form" ? do
@@ -123,13 +124,14 @@ emailSubmission emailError =
           C.display C.flex
           C.flexFlow Fb.column Fb.nowrap
       ) <> phoneCss (do
-          "#content" ? do
+          "#grid" ? do
             "grid-template-columns" -: "auto"
             "grid-row-gap" -: "20 px"
       ) <> largeCss (do
-          "#content" ? do
+          "#grid" ? do
             "grid-template-columns" -: "60% 40%"
             "grid-column-gap" -: "50px"
+          "#content" ? do
             padding' $ C.px 75
       )
 
