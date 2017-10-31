@@ -56,13 +56,13 @@ instance FromEnv StaticResources where
       <*> env "FAVICON_URL"
       <*> env "DAVE_PROFILE_PIC_URL"
       <*> env "PAUL_PROFILE_PIC_URL"
-      <*> envEither "COMPANY_ADDRESS"
+      <*> envJson "COMPANY_ADDRESS"
       <*> env "COMPANY_NUMBER"
 
 
 -- FIXME: this lacks an accompanying signature because I can't get at Envy's
 -- Parser
-envEither str =
+envJson str =
     env str >>=
     either (throwError . (\e -> str ++ ": " ++ e)) return . Json.eitherDecode
 
