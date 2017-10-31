@@ -344,6 +344,9 @@ page pageTitle pageCss activeNavBarItem pageContent = docTypeHtml $ do
           div ! id_ "header" $ do
             a ! href "/" $ do
               static <- lift ask
+              -- FIXME: For now, always display "Concert" with the logo. Later,
+              -- might want to do the following to compact just down to the logo
+              -- on smaller screens:
               -- object ! height "33" ! data_ (showValue $ logoUrl static)
               --   ! class_ "small-screen" ! alt "Concert Logo" $ "Concert Logo"
               -- object ! height "33" ! data_ (showValue $ logoAndTextUrl static)
