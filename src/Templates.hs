@@ -322,10 +322,12 @@ page pageTitle pageCss activeNavBarItem pageContent = docTypeHtml $ do
           div ! id_ "header" $ do
             a ! href "/" $ do
               static <- lift ask
-              object ! height "33" ! data_ (showValue $ logoUrl static)
-                ! class_ "small-screen" ! alt "Concert Logo" $ "Concert Logo"
+              -- object ! height "33" ! data_ (showValue $ logoUrl static)
+              --   ! class_ "small-screen" ! alt "Concert Logo" $ "Concert Logo"
+              -- object ! height "33" ! data_ (showValue $ logoAndTextUrl static)
+              --   ! class_ "large-screen" ! alt "Concert Logo" $ "Concert Logo"
               object ! height "33" ! data_ (showValue $ logoAndTextUrl static)
-                ! class_ "large-screen" ! alt "Concert Logo" $ "Concert Logo"
+                ! alt "Concert Logo" $ "Concert Logo"
             navBar activeNavBarItem
 
     contentWrapper =
