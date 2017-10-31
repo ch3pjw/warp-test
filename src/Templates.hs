@@ -260,8 +260,6 @@ aboutUs =
           C.fontSize $ C.em 2.5
         "#about-profiles" ? do
           C.display C.grid
-        -- ".about-profile" ? do
-        --   C.width $ C.pct 100
         ".profile-pic-cont" ? do
           C.textDecoration C.none
           C.color C.inherit
