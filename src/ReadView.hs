@@ -17,6 +17,7 @@ module ReadView
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader (ReaderT)
+import Data.Aeson (ToJSON, FromJSON)
 import Data.Pool (Pool)
 import Data.Text (Text)
 import Data.UUID (UUID)
@@ -57,9 +58,9 @@ erTableName = "email_registration"
 
 
 latestEvents
-  :: (MonadIO m)
+  :: (MonadIO m, ToJSON event, FromJSON event)
   => SequenceNumber
-  -> DB.SqlPersistT m [GlobalStreamEvent (TimeStamped UserEvent)]
+  -> DB.SqlPersistT m [GlobalStreamEvent event]
 latestEvents latestHandled =
     getEvents eventReader (eventsStartingAt () $ latestHandled + 1)
   where
