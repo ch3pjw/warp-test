@@ -77,7 +77,7 @@ main = do
           (formatVLink $ scDomain serverConfig)
           (formatULink $ scDomain serverConfig)
 
-    withAsync (viewWorker pool (U.readChan o2)) $ \viewWorkerAsync -> do
+    withAsync (viewWorker userStateReadView pool (U.readChan o2)) $ \viewWorkerAsync -> do
         link viewWorkerAsync
         withAsync (mailer genEmail smtpSettings store (U.readChan o1)) $ \mailerAsync -> do
             link mailerAsync
