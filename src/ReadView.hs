@@ -28,11 +28,13 @@ import qualified Database.Persist.Postgresql as DB
 import Database.Persist.TH (
     share, mkPersist, sqlSettings, mkMigrate, persistLowerCase)
 import Eventful (
-    SequenceNumber(..), GlobalStreamEvent,
+    SequenceNumber(..), EventVersion, GlobalStreamEvent,
     getEvents, eventsStartingAt, streamEventEvent, streamEventKey,
     streamEventPosition)
 import Eventful.Store.Postgresql (serializedGlobalEventStoreReader)
-import Eventful.Store.Sql (jsonStringSerializer, defaultSqlEventStoreConfig, sqlGlobalEventStoreReader)
+import Eventful.Store.Sql (
+    jsonStringSerializer, defaultSqlEventStoreConfig,
+    sqlGlobalEventStoreReader, JSONString)
 
 import Registration (EmailAddress, UserEvent(..), TimeStamped, untilNothing)
 
@@ -48,11 +50,23 @@ ViewSequenceNumber
 data ReadView event = ReadView
   { rvTableName :: Text
   , rvMigration :: DB.Migration
-  , rvUpdate :: UUID -> event -> ReaderT DB.SqlBackend IO ()
+  , rvUpdate :: SequenceNumber -> UUID -> EventVersion -> event -> ReaderT DB.SqlBackend IO ()
   }
 
 instance Show (ReadView event) where
     show rv = unpack $ "<ReadView " <> (rvTableName rv) <> ">"
+
+
+-- | A simple read view doesn't give you access to event version information
+--   from the event log, just events and the keys of the events streams for
+--   those events.
+simpleReadView
+  :: Text -> DB.Migration -> (UUID -> event -> ReaderT DB.SqlBackend IO ())
+  -> ReadView event
+simpleReadView tableName migration update =
+    ReadView tableName migration update'
+  where
+    update' _ uuid _ event = update uuid event
 
 
 latestEvents
@@ -69,11 +83,16 @@ latestEvents latestHandled =
 handleReadViewEvents
   :: ReadView event -> [GlobalStreamEvent event] -> ReaderT DB.SqlBackend IO ()
 handleReadViewEvents rv events = do
-    mapM_ (uncurry (rvUpdate rv) . decomposeEvent) events
+    mapM_ (applyUpdate . decomposeEvent) events
     updateSN events
   where
     decomposeEvent e = let e' = streamEventEvent e in
-        (streamEventKey e', streamEventEvent e')
+        ( streamEventPosition e
+        , streamEventKey e'
+        , streamEventPosition e'
+        , streamEventEvent e')
+    applyUpdate (globalPos, streamKey, streamPos, streamEventData) =
+        rvUpdate rv globalPos streamKey streamPos streamEventData
     updateSN [] = return ()
     updateSN es = let latestSN = streamEventPosition $ last es in
         DB.updateWhere
@@ -125,7 +144,7 @@ EmailRegistration
 -- FIXME: table name needs to line up with what the template stuff above
 -- produces, and is _not_ checked :-/
 userStateReadView :: ReadView (TimeStamped UserEvent)
-userStateReadView = ReadView  "email_registration" migrateER update
+userStateReadView = simpleReadView  "email_registration" migrateER update
   where
     update uuid (_, UserSubmitted email) = void $ DB.insertBy $
         EmailRegistration uuid email False
