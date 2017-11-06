@@ -13,6 +13,9 @@ module ReadView
   , ViewSequenceNumberId
   , viewWorker
   , userStateReadView
+  , newEventsReadView
+  , SqlEvent2(..)
+  , SqlEvent2Id
   ) where
 
 import Control.Monad
@@ -30,13 +33,18 @@ import Database.Persist.TH (
 import Eventful (
     SequenceNumber(..), EventVersion, GlobalStreamEvent,
     getEvents, eventsStartingAt, streamEventEvent, streamEventKey,
-    streamEventPosition)
+    streamEventPosition, serialize)
 import Eventful.Store.Postgresql (serializedGlobalEventStoreReader)
 import Eventful.Store.Sql (
     jsonStringSerializer, defaultSqlEventStoreConfig,
     sqlGlobalEventStoreReader, JSONString)
 
 import Registration (EmailAddress, UserEvent(..), TimeStamped, untilNothing)
+import Events (
+  Event( EmailAddressSubmittedEvent
+       , EmailAddressVerifiedEvent
+       , EmailAddressRemovedEvent
+       , EmailSentEvent))
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateVSN"] [persistLowerCase|
@@ -153,3 +161,25 @@ userStateReadView = simpleReadView  "email_registration" migrateER update
         [EmailRegistrationVerified =. True]
     update uuid (_, UserUnsubscribed) = DB.deleteBy $ UniqueUuid uuid
     update _ _ = return ()
+
+share [mkPersist sqlSettings, mkMigrate "migrateSE2"] [persistLowerCase|
+SqlEvent2 sql=events_2
+    Id SequenceNumber sql=sequence_number
+    uuid UUID
+    version EventVersion
+    event JSONString
+    UniqueUuidVersion2 uuid version
+    deriving Show
+|]
+
+newEventsReadView :: ReadView (TimeStamped UserEvent)
+newEventsReadView = ReadView "sql_event_2" migrateSE2 update
+  where
+    convert (UserSubmitted e) = EmailAddressSubmittedEvent e
+    convert UserVerified = EmailAddressVerifiedEvent
+    convert UserUnsubscribed = EmailAddressRemovedEvent
+    convert (Emailed et) = EmailSentEvent et
+    update _ uuid streamPos event =
+      void $ DB.insertBy $
+      SqlEvent2 uuid streamPos $
+      serialize jsonStringSerializer (convert <$> event)
