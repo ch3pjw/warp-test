@@ -12,12 +12,14 @@ module ReadView
   , emailRegistrationEmailAddress
   , ViewSequenceNumberId
   , viewWorker
+  , runWorkers
   , userStateReadView
   , newEventsReadView
   , SqlEvent2(..)
   , SqlEvent2Id
   ) where
 
+import qualified Control.Concurrent.Async as A
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader (ReaderT)
@@ -110,7 +112,6 @@ handleReadViewEvents rv events = do
 
 initialiseReadView :: ReadView event -> ReaderT DB.SqlBackend IO ()
 initialiseReadView rv = do
-    DB.runMigration migrateVSN  -- Presumably OK to do evey time?
     DB.runMigration $ rvMigration rv
     void . getOrInitSequenceNumber $ rvTableName rv
 
@@ -137,6 +138,18 @@ viewWorker rv pool wait = DB.runSqlPool i pool >> f
   where
     f = untilNothing wait (const $ DB.runSqlPool (updateReadView rv) pool)
     i = initialiseReadView rv >> updateReadView rv
+
+
+runWorkers
+  :: (ToJSON event, FromJSON event)
+  => [ReadView event] -> Pool DB.SqlBackend -> (IO (IO (Maybe a))) -> IO ()
+runWorkers rvs pool getWait = do
+    DB.runSqlPool (DB.runMigration migrateVSN) pool
+    as <- mapM runViewWorker rvs
+    mapM_ A.link as
+    mapM_ A.wait as
+  where
+    runViewWorker rv = A.async $ getWait >>= viewWorker rv pool
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateER"] [persistLowerCase|
