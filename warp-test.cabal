@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src
   ghc-options:         -Wall
   exposed-modules:     Css
+                     , Events
                      , Lib
                      , Mailer
                      , Middleware
@@ -24,6 +25,7 @@ library
                      , Registration
                      , Router
                      , Templates
+                     , TH
                      , Types
   build-depends:       base >= 4.7 && < 5
                      , aeson
@@ -36,6 +38,7 @@ library
                      , datetime
                      , email-validate
                      , envy
+                     , errors
                      , eventful-core
                      , eventful-memory
                      , eventful-postgresql
@@ -53,6 +56,7 @@ library
                      , stm
                      , stringable
                      , time
+                     , template-haskell
                      , text
                      , text-format
                      , unagi-chan
