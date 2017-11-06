@@ -9,9 +9,22 @@ import qualified Data.Text as Text
 
 import Language.Haskell.TH
 
-mashSumTypes :: String -> [Name] -> Q [Dec]
-mashSumTypes _ [] = return []
-mashSumTypes newNameStr typeNames =
+-- | Makes a new sum type with the given name from a list of (names of) other
+--   sum types. Note that the input types must have constructors suffixed with
+--   their type name. The newly constructed type will have constructors where
+--   the original type name suffix has been replaced with the name of the new
+--   type. E.g.
+--
+--   data FooType = Foo1FooType | Foo2FooType
+--   data BarType = BarBarType
+--   unionSumTypes "FooBarType" [''FooType, ''BarType]
+--
+--   provides
+--
+--   data FooBarType = Foo1FooBarType | Foo2FooBarType | BarFooBarType
+unionSumTypes :: String -> [Name] -> Q [Dec]
+unionSumTypes _ [] = return []
+unionSumTypes newNameStr typeNames =
   do
     newConstructors <- join <$> mapM mkNewConstructors typeNames
     return [DataD [] (mkName newNameStr) [] Nothing newConstructors []]

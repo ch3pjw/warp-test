@@ -7,7 +7,7 @@ import Data.Text (Text)
 import Data.UUID (UUID)
 import Data.ByteString (ByteString)
 
-import TH (mashSumTypes)
+import TH (unionSumTypes)
 import Registration (EmailAddress, EmailType)
 
 data EmailEvent
@@ -32,7 +32,7 @@ data SessionEvent
   | SessionSignedOutSessionEvent
   deriving (Eq, Show)
 
-mashSumTypes "Event" [''EmailEvent, ''AccountEvent, ''SessionEvent]
+unionSumTypes "Event" [''EmailEvent, ''AccountEvent, ''SessionEvent]
 
 deriving instance Eq Event
 deriving instance Show Event
