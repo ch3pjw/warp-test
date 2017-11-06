@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Events where
 
@@ -32,3 +33,6 @@ data SessionEvent
   deriving (Eq, Show)
 
 mashSumTypes "Event" [''EmailEvent, ''AccountEvent, ''SessionEvent]
+
+deriving instance Eq Event
+deriving instance Show Event
