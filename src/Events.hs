@@ -3,6 +3,10 @@
 
 module Events where
 
+import Data.Aeson (ToJSON, toJSON, FromJSON, parseJSON)
+import Data.Aeson.Casing (aesonPrefix, camelCase)
+import Data.Aeson.TH (deriveJSON)
+import qualified Data.Aeson.Types as T
 import Data.Text (Text)
 import Data.UUID (UUID)
 import Data.ByteString (ByteString)
@@ -25,7 +29,14 @@ data AccountEvent
   | AccountRemovedSessionAccountEvent UUID
   deriving (Eq, Show)
 
-type UserAgentString = ByteString
+newtype UserAgentString =
+    UserAgentString {unUserAgentString :: Text} deriving (Eq, Show)
+
+instance ToJSON UserAgentString where
+    toJSON = T.String . unUserAgentString
+
+instance FromJSON UserAgentString where
+    parseJSON = T.withText "UserAgentString" $ pure . UserAgentString
 
 data SessionEvent
   = SessionSignedInSessionEvent UserAgentString
@@ -36,3 +47,5 @@ unionSumTypes "Event" [''EmailEvent, ''AccountEvent, ''SessionEvent]
 
 deriving instance Eq Event
 deriving instance Show Event
+
+deriveJSON (aesonPrefix camelCase) ''Event
