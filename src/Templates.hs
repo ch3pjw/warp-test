@@ -252,7 +252,7 @@ aboutUs =
             s "his real passion was software engineering."
           p $ do
             s "He loves turning big, abstract ideas into usable, rock-solid "
-            s "bits of software. He's also a musican and composer, so Concert "
+            s "bits of software. He's also a musician and composer, so Concert "
             s "is the perfect setting to combine all his interests."
   where
     css = globalCss (do
