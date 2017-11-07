@@ -17,6 +17,7 @@ module ReadView
   , newEventsReadView
   , SqlEvent2(..)
   , SqlEvent2Id
+  , readViewTranslator
   ) where
 
 import qualified Control.Concurrent.Async as A
@@ -35,7 +36,7 @@ import Database.Persist.TH (
 import Eventful (
     SequenceNumber(..), EventVersion, GlobalStreamEvent,
     getEvents, eventsStartingAt, streamEventEvent, streamEventKey,
-    streamEventPosition, serialize)
+    streamEventPosition, serialize, deserialize)
 import Eventful.Store.Postgresql (serializedGlobalEventStoreReader)
 import Eventful.Store.Sql (
     jsonStringSerializer, defaultSqlEventStoreConfig,
@@ -196,3 +197,15 @@ newEventsReadView = ReadView "events_2" migrateSE2 update
       void $ DB.insertBy $
       SqlEvent2 uuid streamPos $
       serialize jsonStringSerializer (convert <$> event)
+
+
+readViewTranslator
+  :: ReadView (TimeStamped Event) -> ReadView (TimeStamped UserEvent)
+readViewTranslator (ReadView mig tn update) = ReadView mig tn update'
+  where
+    update' globalPos _ _ _ = do
+        r <- DB.get $ SqlEvent2Key globalPos
+        r' <- maybe (fail "Missing record!") return r
+        e <- maybe (fail "Couldn't deserialise") return (des r')
+        update globalPos (sqlEvent2Uuid r') (sqlEvent2Version r') e
+    des = deserialize jsonStringSerializer . sqlEvent2Event
