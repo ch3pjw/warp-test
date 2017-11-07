@@ -136,10 +136,10 @@ updateEmailState s@(EmailState _ es _) (_, Emailed emailType) =
     s {usPendingEmails = filter (/= emailType) es}
 
 
-type UserProjection = Projection EmailState (TimeStamped UserEvent)
+type EmailProjection = Projection EmailState (TimeStamped UserEvent)
 
-initialUserProjection :: UserProjection
-initialUserProjection = Projection initialEmailState updateEmailState
+initialEmailProjection :: EmailProjection
+initialEmailProjection = Projection initialEmailState updateEmailState
 
 
 data EmailCommand
@@ -170,7 +170,7 @@ type EmailCommandHandler =
 
 userCommandHandler :: DateTime -> EmailCommandHandler
 userCommandHandler now =
-  CommandHandler (handleEmailCommand now) initialUserProjection
+  CommandHandler (handleEmailCommand now) initialEmailProjection
 
 
 data Store = Store
@@ -189,7 +189,7 @@ newStoreFrom
          StreamProjection UUID EventVersion EmailState (TimeStamped UserEvent))
      )
   -> IO Store
-newStoreFrom write getLatestUserProjection = do
+newStoreFrom write getLatestEmailProjection = do
     -- We assume that the unused OutChan gets cleaned up when it goes out of
     -- scope:
     (i, _) <- U.newChan
@@ -198,7 +198,7 @@ newStoreFrom write getLatestUserProjection = do
             write uuid events
             when (not . null $ events) $ U.writeChan i (Just uuid)
         getLatestState uuid =
-            streamProjectionState <$> getLatestUserProjection uuid
+            streamProjectionState <$> getLatestEmailProjection uuid
     return $
       Store (U.dupChan i) (U.writeChan i Nothing) update getLatestState
 
@@ -212,7 +212,7 @@ newStore = do
     newStoreFrom
       (\uuid -> void . atomically . storeEvents w uuid AnyPosition)
       (\uuid -> atomically $ getLatestStreamProjection r $
-          versionedStreamProjection uuid initialUserProjection)
+          versionedStreamProjection uuid initialEmailProjection)
 
 updateStore :: Action (TimeStamped UserEvent) -> Store -> UUID -> IO ()
 updateStore = flip _sUpdate
@@ -332,4 +332,4 @@ newDBStore pool =
           DB.runSqlPool (storeEvents writer uuid AnyPosition events) pool)
       (\uuid -> DB.runSqlPool
           (getLatestStreamProjection reader $
-              versionedStreamProjection uuid initialUserProjection) pool)
+              versionedStreamProjection uuid initialEmailProjection) pool)
