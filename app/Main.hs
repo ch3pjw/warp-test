@@ -62,7 +62,6 @@ main = do
     pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr $ rcDatabaseConfig regConfig) 2)
     store <- newDBStore pool
     o1 <- sGetNotificationChan store
-    o2 <- sGetNotificationChan store
     let actor = newActor (rcUuidSalt regConfig) getCurrentTime
 
     let authMiddleware = buildAuth
@@ -77,7 +76,9 @@ main = do
           (formatVLink $ scDomain serverConfig)
           (formatULink $ scDomain serverConfig)
 
-    withAsync (viewWorker userStateReadView pool (U.readChan o2)) $ \viewWorkerAsync -> do
+    let getWait = U.readChan <$> sGetNotificationChan store
+
+    withAsync (runWorkers [userStateReadView, newEventsReadView] pool getWait) $ \viewWorkerAsync -> do
         link viewWorkerAsync
         withAsync (mailer genEmail smtpSettings store (U.readChan o1)) $ \mailerAsync -> do
             link mailerAsync
