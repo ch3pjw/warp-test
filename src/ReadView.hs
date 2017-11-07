@@ -36,7 +36,7 @@ import Database.Persist.TH (
 import Eventful (
     SequenceNumber(..), EventVersion, GlobalStreamEvent,
     getEvents, eventsStartingAt, streamEventEvent, streamEventKey,
-    streamEventPosition, serialize, deserialize)
+    streamEventPosition, serialize)
 import Eventful.Store.Postgresql (serializedGlobalEventStoreReader)
 import Eventful.Store.Sql (
     jsonStringSerializer, defaultSqlEventStoreConfig,
@@ -176,6 +176,13 @@ userStateReadView = simpleReadView  "email_registration" migrateER update
     update uuid (_, UserUnsubscribed) = DB.deleteBy $ UniqueUuid uuid
     update _ _ = return ()
 
+
+convertEvent :: UserEvent -> Event
+convertEvent (UserSubmitted e) = EmailAddressSubmittedEvent e
+convertEvent UserVerified = EmailAddressVerifiedEvent
+convertEvent UserUnsubscribed = EmailAddressRemovedEvent
+convertEvent (Emailed et) = EmailSentEvent et
+
 share [mkPersist sqlSettings, mkMigrate "migrateSE2"] [persistLowerCase|
 SqlEvent2 sql=events_2
     Id SequenceNumber sql=sequence_number
@@ -189,23 +196,17 @@ SqlEvent2 sql=events_2
 newEventsReadView :: ReadView (TimeStamped UserEvent)
 newEventsReadView = ReadView "events_2" migrateSE2 update
   where
-    convert (UserSubmitted e) = EmailAddressSubmittedEvent e
-    convert UserVerified = EmailAddressVerifiedEvent
-    convert UserUnsubscribed = EmailAddressRemovedEvent
-    convert (Emailed et) = EmailSentEvent et
     update _ uuid streamPos event =
       void $ DB.insertBy $
       SqlEvent2 uuid streamPos $
-      serialize jsonStringSerializer (convert <$> event)
+      serialize jsonStringSerializer (convertEvent <$> event)
 
 
+-- | Intended to take a ReadView designed to run on our new Event type and run
+--   it on top of an event log using the old UserEvent type.
 readViewTranslator
   :: ReadView (TimeStamped Event) -> ReadView (TimeStamped UserEvent)
 readViewTranslator (ReadView mig tn update) = ReadView mig tn update'
   where
-    update' globalPos _ _ _ = do
-        r <- DB.get $ SqlEvent2Key globalPos
-        r' <- maybe (fail "Missing record!") return r
-        e <- maybe (fail "Couldn't deserialise") return (des r')
-        update globalPos (sqlEvent2Uuid r') (sqlEvent2Version r') e
-    des = deserialize jsonStringSerializer . sqlEvent2Event
+    update' globalPos uuid streamPos event =
+        update globalPos uuid streamPos (convertEvent <$> event)
