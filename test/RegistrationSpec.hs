@@ -138,7 +138,7 @@ spec = do
     checkUnsubscribed (c, a, s, uo, eo, u) = do
         aUnsubscribe a s u
         state <- sPoll s u
-        state `shouldBe` initialUserState
+        state `shouldBe` initialEmailState
     beforeDoASub (c, a, s, uo, eo) = do
         uuid <- subAndGetEmail a s eo
         return (c, a, s, uo, eo, uuid)
@@ -151,11 +151,11 @@ plusTimeout :: Integer -> DateTime
 plusTimeout = addUTCTime verificationTimeout . DateTime.fromSeconds
 
 
--- | Predicate for checking UserState verificationState
-userStateVerification :: VerificationState -> UserState -> Bool
+-- | Predicate for checking EmailState verificationState
+userStateVerification :: VerificationState -> EmailState -> Bool
 userStateVerification vs us = usVerificationState us == vs
 
-userStateEmail :: EmailAddress -> UserState -> Bool
+userStateEmail :: EmailAddress -> EmailState -> Bool
 userStateEmail e us = usEmailAddress us == e
 
 

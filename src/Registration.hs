@@ -12,8 +12,8 @@ module Registration
   , UserEvent(..)
   , TimeStamped
   , VerificationState(..), verificationTimeout
-  , UserState, usEmailAddress, usPendingEmails, usVerificationState,
-    initialUserState
+  , EmailState, usEmailAddress, usPendingEmails, usVerificationState,
+    initialEmailState
   , Store, newStore, newDBStore, sGetNotificationChan, sSendShutdown, sPoll
   , getAndShowState
   , Actor, newActor, aSubmitEmailAddress, aVerify, aUnsubscribe, aGetTime
@@ -87,19 +87,19 @@ data VerificationState
   | Verified
   deriving (Eq, Show)
 
-data UserState
-  = UserState
+data EmailState
+  = EmailState
   { usVerificationState :: VerificationState
   , usPendingEmails :: [EmailType]
   , usEmailAddress :: EmailAddress
   } deriving (Eq, Show)
 
 
-initialUserState :: UserState
-initialUserState = UserState Unverified [] ""
+initialEmailState :: EmailState
+initialEmailState = EmailState Unverified [] ""
 
-withinValidationPeriod :: DateTime -> UserState -> Bool
-withinValidationPeriod now (UserState (Pending timeout) _ _ ) = now < timeout
+withinValidationPeriod :: DateTime -> EmailState -> Bool
+withinValidationPeriod now (EmailState (Pending timeout) _ _ ) = now < timeout
 withinValidationPeriod _ _ = False
 
 
@@ -120,26 +120,26 @@ data UserEvent
   | Emailed EmailType
   deriving (Eq, Show)
 
-updateUserState :: UserState -> TimeStamped UserEvent -> UserState
-updateUserState (UserState vs es _) (t, UserSubmitted e)
-  | vs == Verified = UserState
+updateEmailState :: EmailState -> TimeStamped UserEvent -> EmailState
+updateEmailState (EmailState vs es _) (t, UserSubmitted e)
+  | vs == Verified = EmailState
       Verified
       (es ++ [ConfirmationEmail])
       e
-  | otherwise = UserState
+  | otherwise = EmailState
       (Pending $ addUTCTime verificationTimeout t)
       (es ++ [VerificationEmail])
       e
-updateUserState s (_, UserVerified) = s {usVerificationState = Verified}
-updateUserState (UserState _ _ _) (_, UserUnsubscribed) = initialUserState
-updateUserState s@(UserState _ es _) (_, Emailed emailType) =
+updateEmailState s (_, UserVerified) = s {usVerificationState = Verified}
+updateEmailState (EmailState _ _ _) (_, UserUnsubscribed) = initialEmailState
+updateEmailState s@(EmailState _ es _) (_, Emailed emailType) =
     s {usPendingEmails = filter (/= emailType) es}
 
 
-type UserProjection = Projection UserState (TimeStamped UserEvent)
+type UserProjection = Projection EmailState (TimeStamped UserEvent)
 
 initialUserProjection :: UserProjection
-initialUserProjection = Projection initialUserState updateUserState
+initialUserProjection = Projection initialEmailState updateEmailState
 
 
 data UserCommand
@@ -150,7 +150,7 @@ data UserCommand
 
 
 handleUserCommand ::
-  DateTime -> UserState -> UserCommand -> [TimeStamped UserEvent]
+  DateTime -> EmailState -> UserCommand -> [TimeStamped UserEvent]
 -- Am I missing the point? This handler doesn't seem to do much. Most of the
 -- logic is in the state machine defined by updateRegistrationState, and we
 -- can't have any side effects here...
@@ -166,7 +166,7 @@ handleUserCommand now s Unsubscribe =
 
 
 type UserCommandHandler =
-  CommandHandler UserState (TimeStamped UserEvent) UserCommand
+  CommandHandler EmailState (TimeStamped UserEvent) UserCommand
 
 userCommandHandler :: DateTime -> UserCommandHandler
 userCommandHandler now =
@@ -180,13 +180,13 @@ data Store = Store
   , sSendShutdown :: IO ()
   , _sUpdate :: Action (TimeStamped UserEvent) -> UUID -> IO ()
   -- FIXME: probably for testing only?
-  , sPoll :: UUID -> IO UserState
+  , sPoll :: UUID -> IO EmailState
   }
 
 newStoreFrom
   :: (UUID -> [TimeStamped UserEvent] -> IO ())
   -> (UUID -> IO (
-         StreamProjection UUID EventVersion UserState (TimeStamped UserEvent))
+         StreamProjection UUID EventVersion EmailState (TimeStamped UserEvent))
      )
   -> IO Store
 newStoreFrom write getLatestUserProjection = do
@@ -220,7 +220,7 @@ updateStore = flip _sUpdate
 
 -- | An Action is a side-effect that runs on a particular stream's state and
 -- | reports what it did as events
-type Action e = UUID -> UserState -> IO [e]
+type Action e = UUID -> EmailState -> IO [e]
 
 commandAction :: UserCommand -> DateTime -> Action (TimeStamped UserEvent)
 commandAction cmd t = \_ s -> do
