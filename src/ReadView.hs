@@ -17,6 +17,7 @@ module ReadView
   , newEventsReadView
   , SqlEvent2(..)
   , SqlEvent2Id
+  , readViewTranslator
   ) where
 
 import qualified Control.Concurrent.Async as A
@@ -164,16 +165,23 @@ EmailRegistration
 
 -- FIXME: table name needs to line up with what the template stuff above
 -- produces, and is _not_ checked :-/
-userStateReadView :: ReadView (TimeStamped UserEvent)
+userStateReadView :: ReadView (TimeStamped Event)
 userStateReadView = simpleReadView  "email_registration" migrateER update
   where
-    update uuid (_, UserSubmitted email) = void $ DB.insertBy $
+    update uuid (_, EmailAddressSubmittedEvent email) = void $ DB.insertBy $
         EmailRegistration uuid email False
-    update uuid (_, UserVerified) = DB.updateWhere
+    update uuid (_, EmailAddressVerifiedEvent) = DB.updateWhere
         [EmailRegistrationUuid ==. uuid]
         [EmailRegistrationVerified =. True]
-    update uuid (_, UserUnsubscribed) = DB.deleteBy $ UniqueUuid uuid
+    update uuid (_, EmailAddressRemovedEvent) = DB.deleteBy $ UniqueUuid uuid
     update _ _ = return ()
+
+
+convertEvent :: UserEvent -> Event
+convertEvent (UserSubmitted e) = EmailAddressSubmittedEvent e
+convertEvent UserVerified = EmailAddressVerifiedEvent
+convertEvent UserUnsubscribed = EmailAddressRemovedEvent
+convertEvent (Emailed et) = EmailSentEvent et
 
 share [mkPersist sqlSettings, mkMigrate "migrateSE2"] [persistLowerCase|
 SqlEvent2 sql=events_2
@@ -186,13 +194,19 @@ SqlEvent2 sql=events_2
 |]
 
 newEventsReadView :: ReadView (TimeStamped UserEvent)
-newEventsReadView = ReadView "sql_event_2" migrateSE2 update
+newEventsReadView = ReadView "events_2" migrateSE2 update
   where
-    convert (UserSubmitted e) = EmailAddressSubmittedEvent e
-    convert UserVerified = EmailAddressVerifiedEvent
-    convert UserUnsubscribed = EmailAddressRemovedEvent
-    convert (Emailed et) = EmailSentEvent et
     update _ uuid streamPos event =
       void $ DB.insertBy $
       SqlEvent2 uuid streamPos $
-      serialize jsonStringSerializer (convert <$> event)
+      serialize jsonStringSerializer (convertEvent <$> event)
+
+
+-- | Intended to take a ReadView designed to run on our new Event type and run
+--   it on top of an event log using the old UserEvent type.
+readViewTranslator
+  :: ReadView (TimeStamped Event) -> ReadView (TimeStamped UserEvent)
+readViewTranslator (ReadView mig tn update) = ReadView mig tn update'
+  where
+    update' globalPos uuid streamPos event =
+        update globalPos uuid streamPos (convertEvent <$> event)
