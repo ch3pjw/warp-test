@@ -142,35 +142,35 @@ initialUserProjection :: UserProjection
 initialUserProjection = Projection initialEmailState updateEmailState
 
 
-data UserCommand
+data EmailCommand
   = Submit EmailAddress
   | Verify
   | Unsubscribe
   deriving (Show, Eq)
 
 
-handleUserCommand ::
-  DateTime -> EmailState -> UserCommand -> [TimeStamped UserEvent]
+handleEmailCommand ::
+  DateTime -> EmailState -> EmailCommand -> [TimeStamped UserEvent]
 -- Am I missing the point? This handler doesn't seem to do much. Most of the
 -- logic is in the state machine defined by updateRegistrationState, and we
 -- can't have any side effects here...
-handleUserCommand now _ (Submit e) = [(now, UserSubmitted e)]
-handleUserCommand now s Verify =
+handleEmailCommand now _ (Submit e) = [(now, UserSubmitted e)]
+handleEmailCommand now s Verify =
   if withinValidationPeriod now s
   then [(now, UserVerified)]
   else []
-handleUserCommand now s Unsubscribe =
+handleEmailCommand now s Unsubscribe =
   if not . Text.null $ usEmailAddress s
   then [(now, UserUnsubscribed)]
   else []
 
 
-type UserCommandHandler =
-  CommandHandler EmailState (TimeStamped UserEvent) UserCommand
+type EmailCommandHandler =
+  CommandHandler EmailState (TimeStamped UserEvent) EmailCommand
 
-userCommandHandler :: DateTime -> UserCommandHandler
+userCommandHandler :: DateTime -> EmailCommandHandler
 userCommandHandler now =
-  CommandHandler (handleUserCommand now) initialUserProjection
+  CommandHandler (handleEmailCommand now) initialUserProjection
 
 
 data Store = Store
@@ -222,7 +222,7 @@ updateStore = flip _sUpdate
 -- | reports what it did as events
 type Action e = UUID -> EmailState -> IO [e]
 
-commandAction :: UserCommand -> DateTime -> Action (TimeStamped UserEvent)
+commandAction :: EmailCommand -> DateTime -> Action (TimeStamped UserEvent)
 commandAction cmd t = \_ s -> do
     return $ commandHandlerHandler (userCommandHandler t) s cmd
 
