@@ -23,6 +23,8 @@ module Registration
   , getDatabaseConfig
   , untilNothing
   , RegistrationConfig, rcDatabaseConfig, rcUuidSalt
+  , initialEmailProjection
+  , EmailStore
   ) where
 
 import Prelude hiding (fail)
@@ -34,6 +36,7 @@ import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Fail (MonadFail, fail)
 import Control.Monad.IO.Class
 import qualified Crypto.Hash.SHA256 as SHA256
+import Data.Aeson (ToJSON, FromJSON)
 import Data.Aeson.TH (deriveJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
 import qualified Data.ByteString as BS
@@ -173,23 +176,21 @@ userCommandHandler now =
   CommandHandler (handleEmailCommand now) initialEmailProjection
 
 
-data Store = Store
+data Store state event = Store
   { sGetNotificationChan :: IO (U.OutChan (Maybe UUID))
   -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
   -- actually writing to the store...
   , sSendShutdown :: IO ()
-  , _sUpdate :: Action (TimeStamped UserEvent) -> UUID -> IO ()
+  , _sUpdate :: Action state event -> UUID -> IO ()
   -- FIXME: probably for testing only?
-  , sPoll :: UUID -> IO EmailState
+  , sPoll :: UUID -> IO state
   }
 
 newStoreFrom
-  :: (UUID -> [TimeStamped UserEvent] -> IO ())
-  -> (UUID -> IO (
-         StreamProjection UUID EventVersion EmailState (TimeStamped UserEvent))
-     )
-  -> IO Store
-newStoreFrom write getLatestEmailProjection = do
+  :: (UUID -> [event] -> IO ())
+  -> (UUID -> IO (StreamProjection UUID EventVersion state event))
+  -> IO (Store state event)
+newStoreFrom write getLatestProjection = do
     -- We assume that the unused OutChan gets cleaned up when it goes out of
     -- scope:
     (i, _) <- U.newChan
@@ -197,13 +198,12 @@ newStoreFrom write getLatestEmailProjection = do
             events <- getLatestState uuid >>= a uuid
             write uuid events
             when (not . null $ events) $ U.writeChan i (Just uuid)
-        getLatestState uuid =
-            streamProjectionState <$> getLatestEmailProjection uuid
+        getLatestState uuid = streamProjectionState <$> getLatestProjection uuid
     return $
       Store (U.dupChan i) (U.writeChan i Nothing) update getLatestState
 
-newStore :: IO Store
-newStore = do
+newStore :: Projection state event -> IO (Store state event)
+newStore initialProjection = do
     tvar <- eventMapTVar
     let
       w = tvarEventStoreWriter tvar
@@ -212,32 +212,34 @@ newStore = do
     newStoreFrom
       (\uuid -> void . atomically . storeEvents w uuid AnyPosition)
       (\uuid -> atomically $ getLatestStreamProjection r $
-          versionedStreamProjection uuid initialEmailProjection)
+          versionedStreamProjection uuid initialProjection)
 
-updateStore :: Action (TimeStamped UserEvent) -> Store -> UUID -> IO ()
+updateStore :: Action state event -> Store state event -> UUID -> IO ()
 updateStore = flip _sUpdate
 
 
 -- | An Action is a side-effect that runs on a particular stream's state and
 -- | reports what it did as events
-type Action e = UUID -> EmailState -> IO [e]
+type Action state event = UUID -> state -> IO [event]
 
-commandAction :: EmailCommand -> DateTime -> Action (TimeStamped UserEvent)
+commandAction :: EmailCommand -> DateTime -> Action EmailState (TimeStamped UserEvent)
 commandAction cmd t = \_ s -> do
     return $ commandHandlerHandler (userCommandHandler t) s cmd
 
-timeStampedAction :: IO DateTime -> Action e -> Action (TimeStamped e)
+timeStampedAction :: IO DateTime -> Action s e -> Action s (TimeStamped e)
 timeStampedAction getT a = \u s -> do
     t <- getT
     fmap ((,) t) <$> a u s
+
+type EmailStore = Store EmailState (TimeStamped UserEvent)
 
 
 data Actor
   = Actor
   { aGetTime :: IO DateTime
-  , aSubmitEmailAddress :: Store -> EmailAddress -> IO ()
-  , aVerify :: Store -> UUID -> IO ()
-  , aUnsubscribe :: Store -> UUID -> IO ()
+  , aSubmitEmailAddress :: EmailStore -> EmailAddress -> IO ()
+  , aVerify :: EmailStore -> UUID -> IO ()
+  , aUnsubscribe :: EmailStore -> UUID -> IO ()
   }
 
 newActor :: Salt -> IO DateTime -> Actor
@@ -249,16 +251,16 @@ newActor salt getT = Actor
   where
     wrap f s u = getT >>= \t -> f t s u
 
-    submitEmailAddress :: EmailAddress -> DateTime -> Store -> a -> IO ()
+    submitEmailAddress :: EmailAddress -> DateTime -> EmailStore -> a -> IO ()
     submitEmailAddress e t s _ = updateStore
         (commandAction (Submit e) t)
         s
         (hashEmail salt e)
 
-    verify :: DateTime -> Store -> UUID -> IO ()
+    verify :: DateTime -> EmailStore -> UUID -> IO ()
     verify = updateStore . commandAction Verify
 
-    unsubscribe :: DateTime -> Store -> UUID -> IO ()
+    unsubscribe :: DateTime -> EmailStore -> UUID -> IO ()
     unsubscribe = updateStore . commandAction Unsubscribe
 
 
@@ -268,7 +270,7 @@ hashEmail salt email =
     (Text.encodeUtf8 $ salt <> email)
 
 
-getAndShowState :: Store -> UUID -> IO ()
+getAndShowState :: (Show state) => Store state event -> UUID -> IO ()
 getAndShowState s = sPoll s >=> print
 
 untilNothing :: (MonadIO m) => IO (Maybe a) -> (a -> m ()) -> m ()
@@ -277,7 +279,7 @@ untilNothing wait f =
     maybe (return ()) (\a -> f a >> untilNothing wait f)
 
 reactivelyRunAction ::
-    Action (TimeStamped UserEvent) -> Store -> IO (Maybe UUID) -> IO ()
+    Action state event -> Store state event -> IO (Maybe UUID) -> IO ()
 reactivelyRunAction a store waitUuid = untilNothing waitUuid (
     -- We catch any exception the action raises because it shouldn't be able
     -- to bring down the entire reaction loop:
@@ -318,8 +320,10 @@ deriveJSON (aesonPrefix camelCase) ''VerificationState
 deriveJSON (aesonPrefix camelCase) ''UserEvent
 
 
-newDBStore :: Pool DB.SqlBackend -> IO Store
-newDBStore pool =
+newDBStore
+  :: (ToJSON event, FromJSON event)
+  =>  Projection state event -> Pool DB.SqlBackend -> IO (Store state event)
+newDBStore initialProjection pool =
   let
     writer = serializedEventStoreWriter jsonStringSerializer $
         postgresqlEventStoreWriter defaultSqlEventStoreConfig
@@ -332,4 +336,4 @@ newDBStore pool =
           DB.runSqlPool (storeEvents writer uuid AnyPosition events) pool)
       (\uuid -> DB.runSqlPool
           (getLatestStreamProjection reader $
-              versionedStreamProjection uuid initialEmailProjection) pool)
+              versionedStreamProjection uuid initialProjection) pool)

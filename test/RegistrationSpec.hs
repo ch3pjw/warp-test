@@ -177,11 +177,11 @@ newClock = do
 
 
 testContext ::
-  ((Clock, Actor, Store, U.OutChan (Maybe UUID), U.OutChan Email) -> IO ()) ->
-  IO ()
+  ((Clock, Actor, EmailStore, U.OutChan (Maybe UUID), U.OutChan Email) -> IO ())
+  -> IO ()
 testContext spec = do
   clock <- newClock
-  store <- newStore
+  store <- newStore initialEmailProjection
   uo <- sGetNotificationChan store
   uo' <- sGetNotificationChan store
   (ei, eo) <- U.newChan
@@ -218,7 +218,7 @@ checkInbox eo ea et =
         | (a, t) == (ea, et) = return u
         | otherwise = fail $ "Bad email: " ++ show (a, t)
 
-mockSendEmails :: U.InChan Email -> Action UserEvent
+mockSendEmails :: U.InChan Email -> Action EmailState UserEvent
 mockSendEmails i u s =
     mapM sendEmail . condenseConsecutive $ usPendingEmails s
   where
@@ -227,5 +227,5 @@ mockSendEmails i u s =
         return $ Emailed emailType
     addr = usEmailAddress s
 
-tsMockSendEmails :: IO DateTime -> U.InChan Email -> Action (TimeStamped UserEvent)
+tsMockSendEmails :: IO DateTime -> U.InChan Email -> Action EmailState (TimeStamped UserEvent)
 tsMockSendEmails getT i = timeStampedAction getT (mockSendEmails i)

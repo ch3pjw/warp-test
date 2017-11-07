@@ -37,7 +37,7 @@ import qualified Text.Email.Validate as Email
 
 import Css
 import Registration (
-    Store, sPoll, Actor, aSubmitEmailAddress, aVerify, aUnsubscribe,
+    EmailStore, sPoll, Actor, aSubmitEmailAddress, aVerify, aUnsubscribe,
     usEmailAddress)
 import ReadView (
     emailRegistrationEmailAddress,
@@ -117,7 +117,7 @@ interestedSubmissionGet = htmlResponse $ Templates.emailSubmission False
 -- | This is posted by the web form
 interestedCollectionPost
   :: (MonadReader StaticResources m, MonadIO m)
-  => Actor -> Store -> Wai.ApplicationT m
+  => Actor -> EmailStore -> Wai.ApplicationT m
 interestedCollectionPost actor store req sendResponse = do
     body <- liftIO $ Wai.strictRequestBody req
     let mUrlE = either (const Nothing) Just $
@@ -171,7 +171,7 @@ helpEmailAddress = "hello@concertdaw.co.uk"
 
 -- | This sets the users email to verified when they visit
 interestedResource
-  :: (MonadReader StaticResources m, MonadIO m) => Actor -> Store -> Text
+  :: (MonadReader StaticResources m, MonadIO m) => Actor -> EmailStore -> Text
   -> Wai.ApplicationT m
 interestedResource actor store name req sendResponse =
     go (getVerb req) (UUID.fromText name)

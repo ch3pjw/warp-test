@@ -60,7 +60,7 @@ main = do
 
     -- Do a bunch of initialisation:
     pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr $ rcDatabaseConfig regConfig) 2)
-    store <- newDBStore pool
+    store <- newDBStore initialEmailProjection pool
     o1 <- sGetNotificationChan store
     let actor = newActor (rcUuidSalt regConfig) getCurrentTime
 

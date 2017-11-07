@@ -17,8 +17,8 @@ import qualified Network.HaskellNet.SMTP.SSL as SMTP
 import qualified Network.Mail.Mime as Mime
 
 import Registration (
-  EmailType(..), UserEvent(Emailed), EmailState(..), Store, condenseConsecutive,
-  reactivelyRunAction, timeStampedAction)
+  EmailType(..), UserEvent(Emailed), EmailState(..), EmailStore,
+  condenseConsecutive, reactivelyRunAction, timeStampedAction)
 import Types (Password(..), EnvToggle(..))
 
 
@@ -118,8 +118,8 @@ generateEmail senderAddr verifyLF unsubLF uuid userState emailType =
 
 
 mailer
-  :: (UUID -> EmailState -> EmailType -> Mime.Mail) -> SmtpSettings -> Store
-  -> IO (Maybe UUID) -> IO ()
+  :: (UUID -> EmailState -> EmailType -> Mime.Mail) -> SmtpSettings
+  -> EmailStore -> IO (Maybe UUID) -> IO ()
 mailer genEmail settings = reactivelyRunAction
     (timeStampedAction getCurrentTime action)
   where
