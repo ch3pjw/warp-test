@@ -186,7 +186,7 @@ SqlEvent2 sql=events_2
 |]
 
 newEventsReadView :: ReadView (TimeStamped UserEvent)
-newEventsReadView = ReadView "sql_event_2" migrateSE2 update
+newEventsReadView = ReadView "events_2" migrateSE2 update
   where
     convert (UserSubmitted e) = EmailAddressSubmittedEvent e
     convert UserVerified = EmailAddressVerifiedEvent
