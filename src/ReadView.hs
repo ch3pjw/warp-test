@@ -165,15 +165,15 @@ EmailRegistration
 
 -- FIXME: table name needs to line up with what the template stuff above
 -- produces, and is _not_ checked :-/
-userStateReadView :: ReadView (TimeStamped UserEvent)
+userStateReadView :: ReadView (TimeStamped Event)
 userStateReadView = simpleReadView  "email_registration" migrateER update
   where
-    update uuid (_, UserSubmitted email) = void $ DB.insertBy $
+    update uuid (_, EmailAddressSubmittedEvent email) = void $ DB.insertBy $
         EmailRegistration uuid email False
-    update uuid (_, UserVerified) = DB.updateWhere
+    update uuid (_, EmailAddressVerifiedEvent) = DB.updateWhere
         [EmailRegistrationUuid ==. uuid]
         [EmailRegistrationVerified =. True]
-    update uuid (_, UserUnsubscribed) = DB.deleteBy $ UniqueUuid uuid
+    update uuid (_, EmailAddressRemovedEvent) = DB.deleteBy $ UniqueUuid uuid
     update _ _ = return ()
 
 
