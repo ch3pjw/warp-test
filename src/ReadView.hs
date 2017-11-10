@@ -42,12 +42,13 @@ import Eventful.Store.Sql (
     jsonStringSerializer, defaultSqlEventStoreConfig,
     sqlGlobalEventStoreReader, JSONString)
 
-import Registration (EmailAddress, UserEvent(..), TimeStamped, untilNothing)
-import Events (
-  Event( EmailAddressSubmittedEvent
-       , EmailAddressVerifiedEvent
-       , EmailAddressRemovedEvent
-       , EmailSentEvent))
+import Registration (TimeStamped, untilNothing)
+import Events
+  ( EmailAddress
+  , Event( EmailAddressSubmittedEvent
+         , EmailAddressVerifiedEvent
+         , EmailAddressRemovedEvent
+         , EmailSentEvent))
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateVSN"] [persistLowerCase|

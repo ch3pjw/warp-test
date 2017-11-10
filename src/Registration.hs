@@ -7,8 +7,6 @@
 
 module Registration
   ( condenseConsecutive
-  , EmailAddress
-  , EmailType(..)
   , UserEvent(..)
   , TimeStamped
   , VerificationState(..), verificationTimeout
@@ -68,7 +66,6 @@ import Eventful.Store.Postgresql (
 
 
 type Salt = Text
-type EmailAddress = Text
 
 type TimeStamped a = (DateTime, a)
 
@@ -77,12 +74,6 @@ verificationTimeout :: NominalDiffTime
 verificationTimeout =
   fromRational . toRational $
   secondsToDiffTime $ 60 * 60 * 24
-
-
-data EmailType
-  = VerificationEmail
-  | ConfirmationEmail  -- Having clicked submit whilst verified
-  deriving (Eq, Show, Read)
 
 data VerificationState
   = Unverified
@@ -315,7 +306,6 @@ getDatabaseConfig :: IO DB.PostgresConf
 getDatabaseConfig = join $ fromDatabaseUrl 1 <$> getEnv "DATABASE_URL"
 
 
-deriveJSON (aesonPrefix camelCase) ''EmailType
 deriveJSON (aesonPrefix camelCase) ''VerificationState
 deriveJSON (aesonPrefix camelCase) ''UserEvent
 

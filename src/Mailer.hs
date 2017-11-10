@@ -16,6 +16,9 @@ import System.Envy (FromEnv, fromEnv, env, envMaybe)
 import qualified Network.HaskellNet.SMTP.SSL as SMTP
 import qualified Network.Mail.Mime as Mime
 
+import Events (
+  EmailType(..),
+  EmailEvent(EmailSentEmailEvent), Event(EmailSentEvent), decomposeEvent)
 import Registration (
   EmailType(..), UserEvent(Emailed), EmailState(..), EmailStore,
   condenseConsecutive, reactivelyRunAction, timeStampedAction)

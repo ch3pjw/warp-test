@@ -12,7 +12,16 @@ import Data.UUID (UUID)
 import Data.ByteString (ByteString)
 
 import UnionSums (unionSumTypes, mkConverter, mkDecompose)
-import Registration (EmailAddress, EmailType)
+
+type EmailAddress = Text
+
+data EmailType
+  = VerificationEmail
+  | ConfirmationEmail  -- Having clicked submit whilst verified
+  deriving (Eq, Show, Read)
+
+deriveJSON (aesonPrefix camelCase) ''EmailType
+
 
 data EmailEvent
   = EmailAddressSubmittedEmailEvent EmailAddress
