@@ -25,7 +25,6 @@ library
                      , Registration
                      , Router
                      , Templates
-                     , TH
                      , Types
   build-depends:       base >= 4.7 && < 5
                      , aeson
@@ -60,6 +59,7 @@ library
                      , text
                      , text-format
                      , unagi-chan
+                     , union-sums
                      , urlencoded
                      , utf8-string
                      , uuid

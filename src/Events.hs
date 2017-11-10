@@ -11,7 +11,7 @@ import Data.Text (Text)
 import Data.UUID (UUID)
 import Data.ByteString (ByteString)
 
-import TH (unionSumTypes)
+import UnionSums (unionSumTypes, mkConverter, mkDecompose)
 import Registration (EmailAddress, EmailType)
 
 data EmailEvent
