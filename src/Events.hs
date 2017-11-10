@@ -1,7 +1,16 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Events where
+module Events
+  ( EmailAddress
+  , EmailType(..)
+  , EmailEvent(..)
+  , AccountEvent(..)
+  , SessionEvent(..)
+  , Event(..)
+  , emailEventToEvent
+  , decomposeEvent
+  ) where
 
 import Data.Aeson (ToJSON, toJSON, FromJSON, parseJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
@@ -9,7 +18,6 @@ import Data.Aeson.TH (deriveJSON)
 import qualified Data.Aeson.Types as T
 import Data.Text (Text)
 import Data.UUID (UUID)
-import Data.ByteString (ByteString)
 
 import UnionSums (unionSumTypes, mkConverter, mkDecompose)
 
@@ -24,9 +32,11 @@ deriveJSON (aesonPrefix camelCase) ''EmailType
 
 
 data EmailEvent
+  -- User-generated events:
   = EmailAddressSubmittedEmailEvent EmailAddress
   | EmailAddressVerifiedEmailEvent
   | EmailAddressRemovedEmailEvent
+  -- System-generated event:
   | EmailSentEmailEvent EmailType
   deriving (Eq, Show)
 
@@ -53,6 +63,10 @@ data SessionEvent
   deriving (Eq, Show)
 
 unionSumTypes "Event" [''EmailEvent, ''AccountEvent, ''SessionEvent]
+mkConverter ''EmailEvent ''Event
+mkConverter ''AccountEvent ''Event
+mkConverter ''SessionEvent ''Event
+mkDecompose ''Event [''EmailEvent, ''AccountEvent, ''SessionEvent]
 
 deriving instance Eq Event
 deriving instance Show Event
