@@ -23,6 +23,7 @@ import System.Envy (FromEnv, fromEnv, env, envMaybe, decodeEnv)
 
 import Registration
 import ReadView
+import Store (newDBStore, sGetNotificationChan)
 import Types (Password(..), EnvToggle(..))
 import Mailer
 import Lib
@@ -60,14 +61,14 @@ main = do
 
     -- Do a bunch of initialisation:
     pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr $ rcDatabaseConfig regConfig) 2)
-    store <- newDBStore initialEmailProjection pool
+    store <- newDBStore pool
     o1 <- sGetNotificationChan store
-    let actor = newActor (rcUuidSalt regConfig) getCurrentTime
+    let actor = newEmailActor (rcUuidSalt regConfig) getCurrentTime store
 
     let authMiddleware = buildAuth
           (scUsername serverConfig) (scPassword serverConfig)
-    let icp = interestedCollectionPost actor store
-    let ir = interestedResource actor store
+    let icp = interestedCollectionPost actor
+    let ir = interestedResource actor
     let ig = interestedCollectionGet pool
     let errHandler = prettifyError' $ templatedErrorTransform errorTemplate
     -- FIXME: runReaderT' for authMiddleware:
@@ -78,7 +79,7 @@ main = do
 
     let getWait = U.readChan <$> sGetNotificationChan store
 
-    withAsync (runWorkers [readViewTranslator userStateReadView, newEventsReadView] pool getWait) $ \viewWorkerAsync -> do
+    withAsync (runWorkers [userStateReadView] pool getWait) $ \viewWorkerAsync -> do
         link viewWorkerAsync
         withAsync (mailer genEmail smtpSettings store (U.readChan o1)) $ \mailerAsync -> do
             link mailerAsync

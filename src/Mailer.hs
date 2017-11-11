@@ -16,12 +16,16 @@ import System.Envy (FromEnv, fromEnv, env, envMaybe)
 import qualified Network.HaskellNet.SMTP.SSL as SMTP
 import qualified Network.Mail.Mime as Mime
 
-import Events (
-  EmailType(..),
-  EmailEvent(EmailSentEmailEvent), Event(EmailSentEvent), decomposeEvent)
+import Events
+  ( EmailType(..)
+  , Event(EmailSentEvent)
+  )
+import Store (Store)
 import Registration (
-  EmailType(..), UserEvent(Emailed), EmailState(..), EmailStore,
-  condenseConsecutive, reactivelyRunAction, timeStampedAction)
+  EmailState(..), TimeStamped,
+  initialEmailProjection, liftProjection,
+  condenseConsecutive, reactivelyRunAction, timeStampedAction,
+  unsafeEventToEmailEvent)
 import Types (Password(..), EnvToggle(..))
 
 
@@ -122,11 +126,12 @@ generateEmail senderAddr verifyLF unsubLF uuid userState emailType =
 
 mailer
   :: (UUID -> EmailState -> EmailType -> Mime.Mail) -> SmtpSettings
-  -> EmailStore -> IO (Maybe UUID) -> IO ()
+  -> Store (TimeStamped Event) -> IO (Maybe UUID) -> IO ()
 mailer genEmail settings = reactivelyRunAction
-    (timeStampedAction getCurrentTime action)
+    (liftProjection unsafeEventToEmailEvent initialEmailProjection)
+    getAction
   where
-    action uuid userState =
+    getAction uuid = timeStampedAction getCurrentTime $ \userState ->
       let
         pending = condenseConsecutive $ usPendingEmails userState
         emails = genEmail uuid userState <$> pending
@@ -135,4 +140,5 @@ mailer genEmail settings = reactivelyRunAction
         -- email to an invalid address. At the moment reactivelyRunAction will
         -- just catch/hide that from us, and because we're just reacting to
         -- current changes, we'll never repeat the email attempt!
-        sendEmails settings emails >> return (Emailed <$> pending)
+        -- FIXME: really want to be operating in the space of email events only:
+        sendEmails settings emails >> return (EmailSentEvent <$> pending)

@@ -24,6 +24,10 @@ library
                      , ReadView
                      , Registration
                      , Router
+                     , Store
+                     , Store.Types
+                     , Store.Db
+                     , Store.Memory
                      , Templates
                      , Types
   build-depends:       base >= 4.7 && < 5
