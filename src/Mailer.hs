@@ -18,12 +18,14 @@ import qualified Network.Mail.Mime as Mime
 
 import Events
   ( EmailType(..)
-  , Event(EmailSentEvent)
+  , Event
+  , EmailEvent(EmailSentEmailEvent)
+  , emailEventToEvent
   )
 import Store (Store)
 import Registration (
   EmailState(..), TimeStamped,
-  initialEmailProjection, liftProjection,
+  initialEmailProjection, liftProjection, liftAction,
   condenseConsecutive, reactivelyRunAction, timeStampedAction,
   unsafeEventToEmailEvent)
 import Types (Password(..), EnvToggle(..))
@@ -131,7 +133,9 @@ mailer genEmail settings = reactivelyRunAction
     (liftProjection unsafeEventToEmailEvent initialEmailProjection)
     getAction
   where
-    getAction uuid = timeStampedAction getCurrentTime $ \userState ->
+    getAction uuid =
+      liftAction (fmap emailEventToEvent) $
+      timeStampedAction getCurrentTime $ \userState ->
       let
         pending = condenseConsecutive $ usPendingEmails userState
         emails = genEmail uuid userState <$> pending
@@ -140,5 +144,4 @@ mailer genEmail settings = reactivelyRunAction
         -- email to an invalid address. At the moment reactivelyRunAction will
         -- just catch/hide that from us, and because we're just reacting to
         -- current changes, we'll never repeat the email attempt!
-        -- FIXME: really want to be operating in the space of email events only:
-        sendEmails settings emails >> return (EmailSentEvent <$> pending)
+        sendEmails settings emails >> return (EmailSentEmailEvent <$> pending)

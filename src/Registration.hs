@@ -18,7 +18,7 @@ module Registration
   , getDatabaseConfig
   , untilNothing
   , RegistrationConfig, rcDatabaseConfig, rcUuidSalt
-  , initialEmailProjection, liftProjection
+  , initialEmailProjection, liftProjection, liftAction
   , EmailStore
   , unsafeEventToEmailEvent
   ) where
