@@ -16,9 +16,18 @@ import System.Envy (FromEnv, fromEnv, env, envMaybe)
 import qualified Network.HaskellNet.SMTP.SSL as SMTP
 import qualified Network.Mail.Mime as Mime
 
+import Events
+  ( EmailType(..)
+  , Event
+  , EmailEvent(EmailSentEmailEvent)
+  , emailEventToEvent
+  )
+import Store (Store)
 import Registration (
-  EmailType(..), UserEvent(Emailed), UserState(..), Store, condenseConsecutive,
-  reactivelyRunAction, timeStampedAction)
+  EmailState(..), TimeStamped,
+  initialEmailProjection, liftProjection, liftAction,
+  condenseConsecutive, reactivelyRunAction, timeStampedAction,
+  unsafeEventToEmailEvent)
 import Types (Password(..), EnvToggle(..))
 
 
@@ -104,7 +113,7 @@ confirmationEmail from to unsubscribeLink =
 
 
 generateEmail
-  :: SenderAddress -> LinkFormatter -> LinkFormatter -> UUID -> UserState
+  :: SenderAddress -> LinkFormatter -> LinkFormatter -> UUID -> EmailState
   -> EmailType -> Mime.Mail
 generateEmail senderAddr verifyLF unsubLF uuid userState emailType =
     case emailType of
@@ -118,12 +127,15 @@ generateEmail senderAddr verifyLF unsubLF uuid userState emailType =
 
 
 mailer
-  :: (UUID -> UserState -> EmailType -> Mime.Mail) -> SmtpSettings -> Store
-  -> IO (Maybe UUID) -> IO ()
+  :: (UUID -> EmailState -> EmailType -> Mime.Mail) -> SmtpSettings
+  -> Store (TimeStamped Event) -> IO (Maybe UUID) -> IO ()
 mailer genEmail settings = reactivelyRunAction
-    (timeStampedAction getCurrentTime action)
+    (liftProjection unsafeEventToEmailEvent initialEmailProjection)
+    getAction
   where
-    action uuid userState =
+    getAction uuid =
+      liftAction (fmap emailEventToEvent) $
+      timeStampedAction getCurrentTime $ \userState ->
       let
         pending = condenseConsecutive $ usPendingEmails userState
         emails = genEmail uuid userState <$> pending
@@ -132,4 +144,4 @@ mailer genEmail settings = reactivelyRunAction
         -- email to an invalid address. At the moment reactivelyRunAction will
         -- just catch/hide that from us, and because we're just reacting to
         -- current changes, we'll never repeat the email attempt!
-        sendEmails settings emails >> return (Emailed <$> pending)
+        sendEmails settings emails >> return (EmailSentEmailEvent <$> pending)

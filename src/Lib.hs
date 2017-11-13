@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Lib where
@@ -37,7 +37,7 @@ import qualified Text.Email.Validate as Email
 
 import Css
 import Registration (
-    Store, sPoll, Actor, aSubmitEmailAddress, aVerify, aUnsubscribe,
+    EmailActor, aPoll, aSubmitEmailAddress, aVerify, aUnsubscribe,
     usEmailAddress)
 import ReadView (
     emailRegistrationEmailAddress,
@@ -117,8 +117,8 @@ interestedSubmissionGet = htmlResponse $ Templates.emailSubmission False
 -- | This is posted by the web form
 interestedCollectionPost
   :: (MonadReader StaticResources m, MonadIO m)
-  => Actor -> Store -> Wai.ApplicationT m
-interestedCollectionPost actor store req sendResponse = do
+  => EmailActor -> Wai.ApplicationT m
+interestedCollectionPost actor req sendResponse = do
     body <- liftIO $ Wai.strictRequestBody req
     let mUrlE = either (const Nothing) Just $
           UrlE.importString $ LUTF8.toString body
@@ -130,7 +130,7 @@ interestedCollectionPost actor store req sendResponse = do
           >>= Email.canonicalizeEmail . UTF8.fromString
     case mEmail of
       (Just canonical) -> do
-            liftIO $ aSubmitEmailAddress actor store $ decodeUtf8 canonical
+            liftIO $ aSubmitEmailAddress actor $ decodeUtf8 canonical
             submissionResponse (decodeUtf8 canonical) req sendResponse
       Nothing ->
         htmlResponse' HTTP.status400 (Templates.emailSubmission True)
@@ -171,23 +171,23 @@ helpEmailAddress = "hello@concertdaw.co.uk"
 
 -- | This sets the users email to verified when they visit
 interestedResource
-  :: (MonadReader StaticResources m, MonadIO m) => Actor -> Store -> Text
+  :: (MonadReader StaticResources m, MonadIO m) => EmailActor -> Text
   -> Wai.ApplicationT m
-interestedResource actor store name req sendResponse =
+interestedResource actor name req sendResponse =
     go (getVerb req) (UUID.fromText name)
   where
     go (Just "verify") (Just uuid) = do
         present <- hasEmail uuid
         if present
         then do
-          liftIO $ aVerify actor store uuid
+          liftIO $ aVerify actor uuid
           verificationResponse req sendResponse
         else htmlResponse' HTTP.status404 verErrHtml req sendResponse
     go (Just "verify") Nothing =
         htmlResponse' HTTP.status404 verErrHtml req sendResponse
     go (Just "unsubscribe") (Just uuid) = do
         present <- hasEmail uuid
-        when present $ liftIO $ aUnsubscribe actor store uuid
+        when present $ liftIO $ aUnsubscribe actor uuid
         unsubscriptionResponse req sendResponse
     go (Just "unsubscribe") Nothing = unsubscriptionResponse req sendResponse
     go _ Nothing = htmlResponse' HTTP.status404 genericErrHtml req sendResponse
@@ -195,7 +195,7 @@ interestedResource actor store name req sendResponse =
     getVerb = join . lookup "action" . HTTP.queryToQueryText . Wai.queryString
     -- FIXME: this poll is a bit of a hack; when we have a read view, we should
     -- really be querying that.
-    hasEmail uuid = liftIO (sPoll store uuid) >>=
+    hasEmail uuid = liftIO (aPoll actor uuid) >>=
         return . not . Text.null . usEmailAddress
     verErrHtml =
       Templates.page ("Verification Failure") (Just notificationCss)

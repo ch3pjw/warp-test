@@ -14,10 +14,6 @@ module ReadView
   , viewWorker
   , runWorkers
   , userStateReadView
-  , newEventsReadView
-  , SqlEvent2(..)
-  , SqlEvent2Id
-  , readViewTranslator
   ) where
 
 import qualified Control.Concurrent.Async as A
@@ -36,18 +32,21 @@ import Database.Persist.TH (
 import Eventful (
     SequenceNumber(..), EventVersion, GlobalStreamEvent,
     getEvents, eventsStartingAt, streamEventEvent, streamEventKey,
-    streamEventPosition, serialize)
+    streamEventPosition)
 import Eventful.Store.Postgresql (serializedGlobalEventStoreReader)
 import Eventful.Store.Sql (
-    jsonStringSerializer, defaultSqlEventStoreConfig,
-    sqlGlobalEventStoreReader, JSONString)
+    jsonStringSerializer,
+    sqlGlobalEventStoreReader)
 
-import Registration (EmailAddress, UserEvent(..), TimeStamped, untilNothing)
-import Events (
-  Event( EmailAddressSubmittedEvent
-       , EmailAddressVerifiedEvent
-       , EmailAddressRemovedEvent
-       , EmailSentEvent))
+import Events
+  ( EmailAddress
+  , Event( EmailAddressSubmittedEvent
+         , EmailAddressVerifiedEvent
+         , EmailAddressRemovedEvent
+         )
+  )
+import Registration (TimeStamped, untilNothing)
+import Store (eventStoreConfig)
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateVSN"] [persistLowerCase|
@@ -87,7 +86,7 @@ latestEvents
 latestEvents latestHandled =
     getEvents eventReader (eventsStartingAt () $ latestHandled + 1)
   where
-    jsonReader = sqlGlobalEventStoreReader defaultSqlEventStoreConfig
+    jsonReader = sqlGlobalEventStoreReader eventStoreConfig
     eventReader = serializedGlobalEventStoreReader jsonStringSerializer jsonReader
 
 
@@ -175,38 +174,3 @@ userStateReadView = simpleReadView  "email_registration" migrateER update
         [EmailRegistrationVerified =. True]
     update uuid (_, EmailAddressRemovedEvent) = DB.deleteBy $ UniqueUuid uuid
     update _ _ = return ()
-
-
-convertEvent :: UserEvent -> Event
-convertEvent (UserSubmitted e) = EmailAddressSubmittedEvent e
-convertEvent UserVerified = EmailAddressVerifiedEvent
-convertEvent UserUnsubscribed = EmailAddressRemovedEvent
-convertEvent (Emailed et) = EmailSentEvent et
-
-share [mkPersist sqlSettings, mkMigrate "migrateSE2"] [persistLowerCase|
-SqlEvent2 sql=events_2
-    Id SequenceNumber sql=sequence_number
-    uuid UUID
-    version EventVersion
-    event JSONString
-    UniqueUuidVersion2 uuid version
-    deriving Show
-|]
-
-newEventsReadView :: ReadView (TimeStamped UserEvent)
-newEventsReadView = ReadView "events_2" migrateSE2 update
-  where
-    update _ uuid streamPos event =
-      void $ DB.insertBy $
-      SqlEvent2 uuid streamPos $
-      serialize jsonStringSerializer (convertEvent <$> event)
-
-
--- | Intended to take a ReadView designed to run on our new Event type and run
---   it on top of an event log using the old UserEvent type.
-readViewTranslator
-  :: ReadView (TimeStamped Event) -> ReadView (TimeStamped UserEvent)
-readViewTranslator (ReadView mig tn update) = ReadView mig tn update'
-  where
-    update' globalPos uuid streamPos event =
-        update globalPos uuid streamPos (convertEvent <$> event)

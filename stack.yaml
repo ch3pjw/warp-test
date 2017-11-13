@@ -50,6 +50,10 @@ packages:
       git: https://github.com/thoughtbot/persistent-database-url.git
       commit: 09782a464f4c50f91b78e118ae56010636cd38cd
     extra-dep: true
+  - location:
+      git: https://github.com/concert/union-sums.git
+      commit: 665ea4e1
+    extra-dep: true
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:

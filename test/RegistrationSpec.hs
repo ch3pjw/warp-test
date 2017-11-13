@@ -138,7 +138,7 @@ spec = do
     checkUnsubscribed (c, a, s, uo, eo, u) = do
         aUnsubscribe a s u
         state <- sPoll s u
-        state `shouldBe` initialUserState
+        state `shouldBe` initialEmailState
     beforeDoASub (c, a, s, uo, eo) = do
         uuid <- subAndGetEmail a s eo
         return (c, a, s, uo, eo, uuid)
@@ -151,11 +151,11 @@ plusTimeout :: Integer -> DateTime
 plusTimeout = addUTCTime verificationTimeout . DateTime.fromSeconds
 
 
--- | Predicate for checking UserState verificationState
-userStateVerification :: VerificationState -> UserState -> Bool
+-- | Predicate for checking EmailState verificationState
+userStateVerification :: VerificationState -> EmailState -> Bool
 userStateVerification vs us = usVerificationState us == vs
 
-userStateEmail :: EmailAddress -> UserState -> Bool
+userStateEmail :: EmailAddress -> EmailState -> Bool
 userStateEmail e us = usEmailAddress us == e
 
 
@@ -177,11 +177,11 @@ newClock = do
 
 
 testContext ::
-  ((Clock, Actor, Store, U.OutChan (Maybe UUID), U.OutChan Email) -> IO ()) ->
-  IO ()
+  ((Clock, Actor, EmailStore, U.OutChan (Maybe UUID), U.OutChan Email) -> IO ())
+  -> IO ()
 testContext spec = do
   clock <- newClock
-  store <- newStore
+  store <- newStore initialEmailProjection
   uo <- sGetNotificationChan store
   uo' <- sGetNotificationChan store
   (ei, eo) <- U.newChan
@@ -218,7 +218,7 @@ checkInbox eo ea et =
         | (a, t) == (ea, et) = return u
         | otherwise = fail $ "Bad email: " ++ show (a, t)
 
-mockSendEmails :: U.InChan Email -> Action UserEvent
+mockSendEmails :: U.InChan Email -> Action EmailState UserEvent
 mockSendEmails i u s =
     mapM sendEmail . condenseConsecutive $ usPendingEmails s
   where
@@ -227,5 +227,5 @@ mockSendEmails i u s =
         return $ Emailed emailType
     addr = usEmailAddress s
 
-tsMockSendEmails :: IO DateTime -> U.InChan Email -> Action (TimeStamped UserEvent)
+tsMockSendEmails :: IO DateTime -> U.InChan Email -> Action EmailState (TimeStamped UserEvent)
 tsMockSendEmails getT i = timeStampedAction getT (mockSendEmails i)
