@@ -64,8 +64,12 @@ spec = do
   around testContext $ do
     describe "the subscription handler" $ do
       context "when the email service is running" $ do
-        -- it "should not let me verify a non-existant email address" $
-        --   const pending
+        it "should not let me verify a non-existant email address" $
+          \ctx ->
+            let actor = tcActor ctx in do
+            aVerify actor uuid1'
+            state <- aPoll actor uuid1'
+            state `shouldSatisfy` emailStateVerification (Unverified)
 
         beforeWith beforeDoASub $
           context "once I have submitted my email address" $ do
@@ -218,6 +222,10 @@ testContext spec = do
     (return $ TestContext clock actor store eo)
     (const $ sSendShutdown store >> wait a)
     spec
+
+
+uuid1' :: UuidFor EmailEvent
+uuid1' = UuidFor $ uuidFromInteger 1
 
 
 seconds :: (RealFrac a, Integral b) => a -> b
