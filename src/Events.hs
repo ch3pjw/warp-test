@@ -98,3 +98,5 @@ instance ToEvent Event where
 
 deriveJSON (aesonPrefix camelCase) ''RegistrationEmailType
 deriveJSON (aesonPrefix camelCase) ''Event
+
+type TimeStamped a = (DateTime, a)

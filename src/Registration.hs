@@ -52,14 +52,12 @@ import Eventful (
 
 import Events (
   EmailAddress, EmailType(..), EmailEvent(..), Event(..), emailEventToEvent,
-  decomposeEvent)
+  decomposeEvent, TimeStamped)
 
 import Store (Action, Store, sPoll, updateStore)
 
 
 type Salt = Text
-
-type TimeStamped a = (DateTime, a)
 
 -- FIXME: from an environment variable or argument
 verificationTimeout :: NominalDiffTime
