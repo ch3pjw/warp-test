@@ -3,7 +3,7 @@
 
 module Events
   ( EmailAddress
-  , EmailType(..)
+  , RegistrationEmailType(..)
   , EmailEvent(..)
   , AccountEvent(..)
   , SessionEvent(..)
@@ -23,13 +23,10 @@ import UnionSums (unionSumTypes, mkConverter, mkDecompose)
 
 type EmailAddress = Text
 
-data EmailType
+data RegistrationEmailType
   = VerificationEmail
   | ConfirmationEmail  -- Having clicked submit whilst verified
   deriving (Eq, Show, Read)
-
-deriveJSON (aesonPrefix camelCase) ''EmailType
-
 
 data EmailEvent
   -- User-generated events:
@@ -37,7 +34,7 @@ data EmailEvent
   | EmailAddressVerifiedEmailEvent
   | EmailAddressRemovedEmailEvent
   -- System-generated event:
-  | EmailSentEmailEvent EmailType
+  | EmailSentEmailEvent RegistrationEmailType
   deriving (Eq, Show)
 
 data AccountEvent
@@ -71,4 +68,5 @@ mkDecompose ''Event [''EmailEvent, ''AccountEvent, ''SessionEvent]
 deriving instance Eq Event
 deriving instance Show Event
 
+deriveJSON (aesonPrefix camelCase) ''RegistrationEmailType
 deriveJSON (aesonPrefix camelCase) ''Event

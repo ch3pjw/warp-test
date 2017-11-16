@@ -17,7 +17,7 @@ import qualified Network.HaskellNet.SMTP.SSL as SMTP
 import qualified Network.Mail.Mime as Mime
 
 import Events
-  ( EmailType(..)
+  ( RegistrationEmailType(..)
   , Event
   , EmailEvent(EmailSentEmailEvent)
   , emailEventToEvent
@@ -114,7 +114,7 @@ confirmationEmail from to unsubscribeLink =
 
 generateEmail
   :: SenderAddress -> LinkFormatter -> LinkFormatter -> UUID -> EmailState
-  -> EmailType -> Mime.Mail
+  -> RegistrationEmailType -> Mime.Mail
 generateEmail senderAddr verifyLF unsubLF uuid userState emailType =
     case emailType of
       VerificationEmail -> verificationEmail from to vl ul
@@ -127,7 +127,7 @@ generateEmail senderAddr verifyLF unsubLF uuid userState emailType =
 
 
 mailer
-  :: (UUID -> EmailState -> EmailType -> Mime.Mail) -> SmtpSettings
+  :: (UUID -> EmailState -> RegistrationEmailType -> Mime.Mail) -> SmtpSettings
   -> Store (TimeStamped Event) -> IO (Maybe UUID) -> IO ()
 mailer genEmail settings = reactivelyRunAction
     (liftProjection unsafeEventToEmailEvent initialEmailProjection)

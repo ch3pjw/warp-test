@@ -77,7 +77,7 @@ data VerificationState
 data EmailState
   = EmailState
   { esVerificationState :: VerificationState
-  , esPendingEmails :: [EmailType]
+  , esPendingEmails :: [RegistrationEmailType]
   , esEmailAddress :: EmailAddress
   } deriving (Eq, Show)
 
