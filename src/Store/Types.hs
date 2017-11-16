@@ -4,43 +4,45 @@ module Store.Types where
 
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Monad (when)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Trans.Writer (runWriterT)
 import Data.UUID (UUID)
 import Eventful (
     Projection, StreamProjection, EventVersion, streamProjectionState)
 
--- | An Action is a side-effect that runs on a particular stream's state and
--- | reports what it did as events
-type Action state event = state -> IO [event]
+import Events (EventT, UuidFor)
 
 data Store event = Store
-  { sGetNotificationChan :: IO (U.OutChan (Maybe UUID))
+  { sGetNotificationChan :: IO (U.OutChan (Maybe (UuidFor event)))
   -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
   -- actually writing to the store...
   , sSendShutdown :: IO ()
-  , _sUpdate :: forall state. Projection state event -> Action state event -> UUID -> IO ()
-  -- FIXME: probably for testing only?
-  , sPoll :: forall state. Projection state event -> UUID -> IO state
+  , sRunEventT :: forall m a. (MonadIO m) => EventT event m a -> UuidFor event -> m a
+  , sRunEventTWithState :: forall state m a. (MonadIO m) => Projection state event -> (state -> EventT event m a) -> UuidFor event -> m a
   }
 
-updateStore
-  :: Projection state event -> Action state event -> Store event -> UUID
-  -> IO ()
-updateStore p a s u = _sUpdate s p a u
-
 newStoreFrom
-  :: (UUID -> [event] -> IO ())
-  -> (forall state. Projection state event -> UUID
+  :: (UuidFor event -> [event] -> IO ())
+  -> (forall state. Projection state event -> UuidFor event
        -> IO (StreamProjection UUID EventVersion state event))
   -> IO (Store event)
 newStoreFrom write getLatestProjection = do
     -- We assume that the unused OutChan gets cleaned up when it goes out of
     -- scope:
     (i, _) <- U.newChan
-    let update initialProjection a uuid = do
-            events <- getLatestState initialProjection uuid >>= a
-            write uuid events
-            when (not . null $ events) $ U.writeChan i (Just uuid)
-        getLatestState initialProjection uuid =
-            streamProjectionState <$> getLatestProjection initialProjection uuid
-    return $
-      Store (U.dupChan i) (U.writeChan i Nothing) update getLatestState
+    return $ Store
+        (U.dupChan i)
+        (U.writeChan i Nothing)
+        (_runEventT i)
+        (_runEventTWithState i)
+  where
+    getLatestState initialProjection uuid' =
+        streamProjectionState <$> getLatestProjection initialProjection uuid'
+    _runEventT i eventT uuid' = do
+        (result, events) <- runWriterT eventT
+        liftIO $ write uuid' events
+        when (not . null $ events) $ liftIO $ U.writeChan i (Just uuid')
+        return result
+    _runEventTWithState i initialProjection f uuid' = do
+        state <- liftIO $ getLatestState initialProjection uuid'
+        _runEventT i (f state) uuid'

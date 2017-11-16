@@ -36,6 +36,7 @@ import Text.BlazeT.Renderer.Utf8 (renderHtml)
 import qualified Text.Email.Validate as Email
 
 import Css
+import Events (UuidFor(..))
 import Registration (
     EmailActor, aPoll, aSubmitEmailAddress, aVerify, aUnsubscribe,
     esEmailAddress)
@@ -174,7 +175,9 @@ interestedResource
   :: (MonadReader StaticResources m, MonadIO m) => EmailActor -> Text
   -> Wai.ApplicationT m
 interestedResource actor name req sendResponse =
-    go (getVerb req) (UUID.fromText name)
+    -- FIXME: UuidFor makes the dangerous assumption that a valid UUID points to
+    -- a stream of the correct type...
+    go (getVerb req) (UuidFor <$> UUID.fromText name)
   where
     go (Just "verify") (Just uuid) = do
         present <- hasEmail uuid

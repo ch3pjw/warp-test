@@ -12,13 +12,16 @@ module Events
   , emailEventToEvent
   , decomposeEvent
   , EventT, logEvents
+  , TimeStamped, timeStamp
   ) where
 
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Writer (WriterT(..), writer, runWriterT)
 import Data.Aeson (ToJSON, toJSON, FromJSON, parseJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
 import Data.Aeson.TH (deriveJSON)
 import qualified Data.Aeson.Types as T
+import Data.DateTime (DateTime)
 import Data.Text (Text)
 import Data.UUID (UUID)
 
@@ -105,4 +108,20 @@ type EventT event m a = WriterT [event] m a
 
 logEvents :: (Monad m) => [event] -> EventT event m ()
 logEvents es = writer ((), es)
+
+liftToEvent :: (Monad m, ToEvent event) => EventT event m a -> EventT Event m a
+liftToEvent et = WriterT $ do
+    (a, es) <- runWriterT et
+    return (a, toEvent <$> es)
+
 type TimeStamped a = (DateTime, a)
+
+timeStamp
+  :: (MonadIO m)
+  => (IO DateTime)
+  -> EventT event m a
+  -> EventT (TimeStamped event) m a
+timeStamp getTime et = WriterT $ do
+    (a , es) <- runWriterT et
+    t <- liftIO getTime
+    return (a, (,) t <$> es)
