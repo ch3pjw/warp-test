@@ -10,7 +10,6 @@ module Registration
   , VerificationState(..), verificationTimeout
   , EmailState, esEmailAddress, esPendingEmails, esVerificationState,
     initialEmailState
-  , getAndShowState
   , EmailActor , newEmailActor
   , aPoll, aSubmitEmailAddress, aVerify, aUnsubscribe, aGetTime
   , reactivelyRunAction
@@ -199,11 +198,6 @@ hashEmail :: Salt -> EmailAddress -> UUID
 hashEmail salt email =
     UUIDv5.generateNamed UUIDv5.namespaceOID . BS.unpack . SHA256.hash $
     (Text.encodeUtf8 $ salt <> email)
-
-
-getAndShowState
-  :: (Show state) => Store event -> Projection state event -> UUID -> IO ()
-getAndShowState p s = sPoll p s >=> print
 
 untilNothing :: (MonadIO m) => IO (Maybe a) -> (a -> m ()) -> m ()
 untilNothing wait f =
