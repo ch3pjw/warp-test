@@ -20,7 +20,7 @@ import qualified Network.HaskellNet.SMTP.SSL as SMTP
 import qualified Network.Mail.Mime as Mime
 
 import Events
-  ( unUuidFor
+  ( UuidFor, unUuidFor
   , RegistrationEmailType(..)
   , Event
   , EmailEvent(EmailSentEmailEvent)
@@ -134,7 +134,8 @@ generateEmail senderAddr verifyLF unsubLF uuid userState emailType =
 
 mailer
   :: (UUID -> EmailState -> RegistrationEmailType -> Mime.Mail)
-  -> SmtpSettings -> Store (TimeStamped Event) -> IO ()
+  -> SmtpSettings -> IO (Maybe (UuidFor (TimeStamped Event)))
+  -> Store (TimeStamped Event) -> IO ()
 mailer genEmail settings = reactivelyRunEventTWithState
     (liftProjection unsafeEventToEmailEvent initialEmailProjection)
     getSendingEventT

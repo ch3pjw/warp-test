@@ -22,7 +22,6 @@ module Registration
   ) where
 
 import Prelude hiding (fail)
-import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Monad hiding (fail)
 import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Fail (MonadFail, fail)
@@ -54,7 +53,7 @@ import Events (
   coerceUuidFor, Event(..), emailEventToEvent, decomposeEvent, TimeStamped,
   EventT, logEvents)
 
-import Store (Store, sRunEventTWithState, sGetNotificationChan)
+import Store (Store, sRunEventTWithState)
 
 
 type Salt = Text
@@ -205,10 +204,9 @@ untilNothing wait f =
 reactivelyRunEventTWithState
   :: (MonadIO m)
   => Projection state event -> (UuidFor event -> state -> EventT event m ())
-  -> Store event -> m ()
-reactivelyRunEventTWithState projection f store = do
-    i <- liftIO $ sGetNotificationChan store
-    untilNothing (U.readChan i) $ \uuid' ->
+  -> (IO (Maybe (UuidFor event))) -> Store event -> m ()
+reactivelyRunEventTWithState projection f waitUuid' store = do
+    untilNothing (waitUuid') $ \uuid' ->
       sRunEventTWithState store projection (f uuid') uuid'
 
 

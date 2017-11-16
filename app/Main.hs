@@ -62,6 +62,7 @@ main = do
     -- Do a bunch of initialisation:
     pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr $ rcDatabaseConfig regConfig) 2)
     store <- newDBStore pool
+    o <- sGetNotificationChan store
     let actor = newEmailActor (rcUuidSalt regConfig) getCurrentTime store
 
     let authMiddleware = buildAuth
@@ -80,7 +81,7 @@ main = do
 
     withAsync (runWorkers [userStateReadView] pool getWait) $ \viewWorkerAsync -> do
         link viewWorkerAsync
-        withAsync (mailer genEmail smtpSettings store) $ \mailerAsync -> do
+        withAsync (mailer genEmail smtpSettings (U.readChan o) store) $ \mailerAsync -> do
             link mailerAsync
             if (scAllowInsecure serverConfig)
             then Warp.run (scPort serverConfig) app
