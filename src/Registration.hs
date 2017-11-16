@@ -8,7 +8,7 @@ module Registration
   ( condenseConsecutive
   , TimeStamped
   , VerificationState(..), verificationTimeout
-  , EmailState, usEmailAddress, usPendingEmails, usVerificationState,
+  , EmailState, esEmailAddress, esPendingEmails, esVerificationState,
     initialEmailState
   , getAndShowState
   , EmailActor , newEmailActor
@@ -76,9 +76,9 @@ data VerificationState
 
 data EmailState
   = EmailState
-  { usVerificationState :: VerificationState
-  , usPendingEmails :: [EmailType]
-  , usEmailAddress :: EmailAddress
+  { esVerificationState :: VerificationState
+  , esPendingEmails :: [EmailType]
+  , esEmailAddress :: EmailAddress
   } deriving (Eq, Show)
 
 
@@ -109,10 +109,10 @@ updateEmailState (EmailState vs es _) (t, EmailAddressSubmittedEmailEvent e)
       (es ++ [VerificationEmail])
       e
 updateEmailState s (_, EmailAddressVerifiedEmailEvent) =
-    s {usVerificationState = Verified}
+    s {esVerificationState = Verified}
 updateEmailState _ (_, EmailAddressRemovedEmailEvent) = initialEmailState
 updateEmailState s@(EmailState _ es _) (_, EmailSentEmailEvent emailType) =
-    s {usPendingEmails = filter (/= emailType) es}
+    s {esPendingEmails = filter (/= emailType) es}
 
 
 type EmailProjection = Projection EmailState (TimeStamped EmailEvent)
@@ -139,7 +139,7 @@ handleEmailCommand now s Verify =
   then [(now, EmailAddressVerifiedEmailEvent)]
   else []
 handleEmailCommand now s Unsubscribe =
-  if not . Text.null $ usEmailAddress s
+  if not . Text.null $ esEmailAddress s
   then [(now, EmailAddressRemovedEmailEvent)]
   else []
 

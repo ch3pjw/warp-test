@@ -120,7 +120,7 @@ generateEmail senderAddr verifyLF unsubLF uuid userState emailType =
       VerificationEmail -> verificationEmail from to vl ul
       ConfirmationEmail -> confirmationEmail from to ul
   where
-    to = Mime.Address Nothing $ usEmailAddress userState
+    to = Mime.Address Nothing $ esEmailAddress userState
     from = unSenderAddress senderAddr
     vl = verifyLF uuid
     ul = unsubLF uuid
@@ -137,7 +137,7 @@ mailer genEmail settings = reactivelyRunAction
       liftAction (fmap emailEventToEvent) $
       timeStampedAction getCurrentTime $ \userState ->
       let
-        pending = condenseConsecutive $ usPendingEmails userState
+        pending = condenseConsecutive $ esPendingEmails userState
         emails = genEmail uuid userState <$> pending
       in
         -- FIXME: sendEmails CAN FAIL! E.g. if the server is dead or we send an

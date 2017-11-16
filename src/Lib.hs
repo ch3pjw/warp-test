@@ -38,7 +38,7 @@ import qualified Text.Email.Validate as Email
 import Css
 import Registration (
     EmailActor, aPoll, aSubmitEmailAddress, aVerify, aUnsubscribe,
-    usEmailAddress)
+    esEmailAddress)
 import ReadView (
     emailRegistrationEmailAddress,
     EntityField(EmailRegistrationId, EmailRegistrationVerified))
@@ -196,7 +196,7 @@ interestedResource actor name req sendResponse =
     -- FIXME: this poll is a bit of a hack; when we have a read view, we should
     -- really be querying that.
     hasEmail uuid = liftIO (aPoll actor uuid) >>=
-        return . not . Text.null . usEmailAddress
+        return . not . Text.null . esEmailAddress
     verErrHtml =
       Templates.page ("Verification Failure") (Just notificationCss)
       Nothing $ do
