@@ -2,7 +2,8 @@
 {-# LANGUAGE StandaloneDeriving #-}
 
 module Events
-  ( EmailAddress
+  ( UuidFor(..), coerceUuidFor
+  , EmailAddress
   , RegistrationEmailType(..)
   , EmailEvent(..)
   , AccountEvent(..)
@@ -20,6 +21,17 @@ import Data.Text (Text)
 import Data.UUID (UUID)
 
 import UnionSums (unionSumTypes, mkConverter, mkDecompose)
+
+data UuidFor event = UuidFor {unUuidFor :: UUID} deriving (Eq, Show)
+
+coerceUuidFor :: UuidFor event -> UuidFor event'
+coerceUuidFor = UuidFor . unUuidFor
+
+instance ToJSON (UuidFor event) where
+  toJSON = toJSON . unUuidFor
+
+instance FromJSON (UuidFor event) where
+  parseJSON = fmap UuidFor . parseJSON
 
 type EmailAddress = Text
 
