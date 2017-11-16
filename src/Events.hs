@@ -8,7 +8,7 @@ module Events
   , EmailEvent(..)
   , AccountEvent(..)
   , SessionEvent(..)
-  , Event(..)
+  , Event(..), liftToEvent
   , emailEventToEvent
   , decomposeEvent
   , EventT, logEvents
