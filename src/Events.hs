@@ -80,5 +80,21 @@ mkDecompose ''Event [''EmailEvent, ''AccountEvent, ''SessionEvent]
 deriving instance Eq Event
 deriving instance Show Event
 
+
+class ToEvent event where
+  toEvent :: event -> Event
+
+instance ToEvent EmailEvent where
+  toEvent = emailEventToEvent
+
+instance ToEvent AccountEvent where
+  toEvent = accountEventToEvent
+
+instance ToEvent SessionEvent where
+  toEvent = sessionEventToEvent
+
+instance ToEvent Event where
+  toEvent = id
+
 deriveJSON (aesonPrefix camelCase) ''RegistrationEmailType
 deriveJSON (aesonPrefix camelCase) ''Event
