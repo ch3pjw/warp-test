@@ -27,7 +27,7 @@ import Data.UUID (UUID)
 
 import UnionSums (unionSumTypes, mkConverter, mkDecompose)
 
-data UuidFor event = UuidFor {unUuidFor :: UUID} deriving (Eq, Show)
+newtype UuidFor event = UuidFor {unUuidFor :: UUID} deriving (Eq, Show)
 
 coerceUuidFor :: UuidFor event -> UuidFor event'
 coerceUuidFor = UuidFor . unUuidFor
