@@ -11,8 +11,10 @@ module Events
   , Event(..)
   , emailEventToEvent
   , decomposeEvent
+  , EventT, logEvents
   ) where
 
+import Control.Monad.Trans.Writer (WriterT(..), writer, runWriterT)
 import Data.Aeson (ToJSON, toJSON, FromJSON, parseJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
 import Data.Aeson.TH (deriveJSON)
@@ -99,4 +101,8 @@ instance ToEvent Event where
 deriveJSON (aesonPrefix camelCase) ''RegistrationEmailType
 deriveJSON (aesonPrefix camelCase) ''Event
 
+type EventT event m a = WriterT [event] m a
+
+logEvents :: (Monad m) => [event] -> EventT event m ()
+logEvents es = writer ((), es)
 type TimeStamped a = (DateTime, a)
