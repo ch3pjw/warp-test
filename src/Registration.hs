@@ -8,27 +8,25 @@ module Registration
   ( condenseConsecutive
   , TimeStamped
   , VerificationState(..), verificationTimeout
-  , EmailState, usEmailAddress, usPendingEmails, usVerificationState,
+  , EmailState, esEmailAddress, esPendingEmails, esVerificationState,
     initialEmailState
-  , getAndShowState
   , EmailActor , newEmailActor
   , aPoll, aSubmitEmailAddress, aVerify, aUnsubscribe, aGetTime
-  , reactivelyRunAction
-  , timeStampedAction
+  , reactivelyRunEventTWithState
   , getDatabaseConfig
   , untilNothing
   , RegistrationConfig, rcDatabaseConfig, rcUuidSalt
-  , initialEmailProjection, liftProjection, liftAction
+  , initialEmailProjection, liftProjection, liftEventT
   , EmailStore
   , unsafeEventToEmailEvent
   ) where
 
 import Prelude hiding (fail)
-import Control.Exception (catch, SomeException)
 import Control.Monad hiding (fail)
 import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Fail (MonadFail, fail)
 import Control.Monad.IO.Class
+import Control.Monad.Trans.Writer (WriterT(..))
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Aeson.TH (deriveJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
@@ -39,7 +37,6 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Time.Clock (NominalDiffTime, secondsToDiffTime, addUTCTime)
-import Data.UUID (UUID)
 import qualified Data.UUID.V5 as UUIDv5
 import System.Environment (getEnv)
 import System.Envy (FromEnv, fromEnv, env)
@@ -52,15 +49,14 @@ import Eventful (
   )
 
 import Events (
-  EmailAddress, EmailType(..), EmailEvent(..), Event(..), emailEventToEvent,
-  decomposeEvent)
+  EmailAddress, RegistrationEmailType(..), EmailEvent(..), UuidFor(..),
+  coerceUuidFor, Event(..), emailEventToEvent, decomposeEvent, TimeStamped,
+  EventT, logEvents)
 
-import Store (Action, Store, sPoll, updateStore)
+import Store (Store, sRunEventTWithState)
 
 
 type Salt = Text
-
-type TimeStamped a = (DateTime, a)
 
 -- FIXME: from an environment variable or argument
 verificationTimeout :: NominalDiffTime
@@ -76,9 +72,9 @@ data VerificationState
 
 data EmailState
   = EmailState
-  { usVerificationState :: VerificationState
-  , usPendingEmails :: [EmailType]
-  , usEmailAddress :: EmailAddress
+  { esVerificationState :: VerificationState
+  , esPendingEmails :: [RegistrationEmailType]
+  , esEmailAddress :: EmailAddress
   } deriving (Eq, Show)
 
 
@@ -109,10 +105,10 @@ updateEmailState (EmailState vs es _) (t, EmailAddressSubmittedEmailEvent e)
       (es ++ [VerificationEmail])
       e
 updateEmailState s (_, EmailAddressVerifiedEmailEvent) =
-    s {usVerificationState = Verified}
+    s {esVerificationState = Verified}
 updateEmailState _ (_, EmailAddressRemovedEmailEvent) = initialEmailState
 updateEmailState s@(EmailState _ es _) (_, EmailSentEmailEvent emailType) =
-    s {usPendingEmails = filter (/= emailType) es}
+    s {esPendingEmails = filter (/= emailType) es}
 
 
 type EmailProjection = Projection EmailState (TimeStamped EmailEvent)
@@ -139,7 +135,7 @@ handleEmailCommand now s Verify =
   then [(now, EmailAddressVerifiedEmailEvent)]
   else []
 handleEmailCommand now s Unsubscribe =
-  if not . Text.null $ usEmailAddress s
+  if not . Text.null $ esEmailAddress s
   then [(now, EmailAddressRemovedEmailEvent)]
   else []
 
@@ -155,26 +151,22 @@ userCommandHandler now =
 type EmailStore = Store (TimeStamped EmailEvent)
 
 
-type EmailAction = Action EmailState (TimeStamped EmailEvent)
+type EmailAction m a = EmailState -> EventT (TimeStamped EmailEvent) m a
 
-emailCommandAction :: IO DateTime -> EmailCommand -> EmailAction
+emailCommandAction
+  :: (MonadIO m) => IO DateTime -> EmailCommand -> EmailAction m ()
 emailCommandAction getT cmd = \s -> do
-    t <- getT
-    return $ commandHandlerHandler (userCommandHandler t) s cmd
-
-timeStampedAction :: IO DateTime -> Action s e -> Action s (TimeStamped e)
-timeStampedAction getT a = \s -> do
-    t <- getT
-    fmap ((,) t) <$> a s
+    t <- liftIO getT
+    logEvents $ commandHandlerHandler (userCommandHandler t) s cmd
 
 
 data EmailActor
   = EmailActor
   { aGetTime :: IO DateTime
   , aSubmitEmailAddress :: EmailAddress -> IO ()
-  , aVerify :: UUID -> IO ()
-  , aUnsubscribe :: UUID -> IO ()
-  , aPoll :: UUID -> IO EmailState
+  , aVerify :: UuidFor EmailEvent -> IO ()
+  , aUnsubscribe :: UuidFor EmailEvent -> IO ()
+  , aPoll :: UuidFor EmailEvent -> IO EmailState
   }
 
 newEmailActor :: Salt -> IO DateTime -> Store (TimeStamped Event) -> EmailActor
@@ -183,44 +175,39 @@ newEmailActor salt getT store = EmailActor
     (\e -> withUpdate (act $ Submit e) (hashEmail salt e))
     (\u -> withUpdate (act Verify) u)
     (\u -> withUpdate (act Unsubscribe) u)
-    (sPoll store (liftProjection unsafeEventToEmailEvent initialEmailProjection))
+    (\u -> sRunEventTWithState store
+        (liftProjection unsafeEventToEmailEvent initialEmailProjection)
+        return
+        (coerceUuidFor u))
   where
-    act :: EmailCommand -> EmailAction
+    act :: EmailCommand -> EmailAction IO ()
     act = emailCommandAction getT
-    withUpdate :: EmailAction -> UUID -> IO ()
+    withUpdate :: EmailAction IO () -> UuidFor EmailEvent -> IO ()
     withUpdate a u =
-        liftedUpdateStore (fmap emailEventToEvent) unsafeEventToEmailEvent store
-        initialEmailProjection a u
+        liftedStoreRunEventTWithState (fmap emailEventToEvent)
+        unsafeEventToEmailEvent store initialEmailProjection a (coerceUuidFor u)
 
 unsafeEventToEmailEvent :: TimeStamped Event -> TimeStamped EmailEvent
 unsafeEventToEmailEvent = fmap $ decomposeEvent id (error "no!") (error "wrong!")
 
-hashEmail :: Salt -> EmailAddress -> UUID
+hashEmail :: Salt -> EmailAddress -> UuidFor EmailEvent
 hashEmail salt email =
+    UuidFor .
     UUIDv5.generateNamed UUIDv5.namespaceOID . BS.unpack . SHA256.hash $
     (Text.encodeUtf8 $ salt <> email)
-
-
-getAndShowState
-  :: (Show state) => Store event -> Projection state event -> UUID -> IO ()
-getAndShowState p s = sPoll p s >=> print
 
 untilNothing :: (MonadIO m) => IO (Maybe a) -> (a -> m ()) -> m ()
 untilNothing wait f =
     liftIO wait >>=
     maybe (return ()) (\a -> f a >> untilNothing wait f)
 
-reactivelyRunAction
-  :: Projection state event -> (UUID -> Action state event) -> Store event
-  -> IO (Maybe UUID) -> IO ()
-reactivelyRunAction projection action store waitUuid = untilNothing waitUuid $
-    -- We catch any exception the action raises because it shouldn't be able
-    -- to bring down the entire reaction loop:
-    \uuid ->
-        updateStore projection (action uuid) store uuid
-        `catch`
-        -- FIXME: this should probably log
-        (\(_ :: SomeException) -> return ())
+reactivelyRunEventTWithState
+  :: (MonadIO m)
+  => Projection state event -> (UuidFor event -> state -> EventT event m ())
+  -> (IO (Maybe (UuidFor event))) -> Store event -> m ()
+reactivelyRunEventTWithState projection f waitUuid' store = do
+    untilNothing (waitUuid') $ \uuid' ->
+      sRunEventTWithState store projection (f uuid') uuid'
 
 
 newtype CanFail a = CanFail
@@ -255,9 +242,11 @@ getDatabaseConfig = join $ fromDatabaseUrl 1 <$> getEnv "DATABASE_URL"
 --   events into the global space. In this case event is the "smaller" event
 --   type and event' the "bigger".
 
-liftAction
-  :: (event -> event') -> Action state event -> Action state event'
-liftAction f action = \state -> fmap f <$> action state
+liftEventT
+  :: (Monad m) => (event -> event') -> EventT event m a -> EventT event' m a
+liftEventT f eventT = WriterT $ do
+    (result, events) <- runWriterT eventT
+    return (result, f <$> events)
 
 liftProjection
   :: (event' -> event) -> Projection state event -> Projection state event'
@@ -266,11 +255,13 @@ liftProjection f (Projection initialState updateState) =
   where
     updateState' state = updateState state . f
 
-liftedUpdateStore
-  :: (event -> event') -> (event' -> event) -> Store event'
-  -> Projection state event -> Action state event -> UUID -> IO ()
-liftedUpdateStore f f' s p a u =
-    updateStore (liftProjection f' p) (liftAction f a) s u
+liftedStoreRunEventTWithState
+  :: (MonadIO m)
+  => (event -> event') -> (event' -> event) -> Store event'
+  -> Projection state event -> (state -> EventT event m a) -> UuidFor event'
+  -> m a
+liftedStoreRunEventTWithState f f' s p eventT uuid' =
+    sRunEventTWithState s (liftProjection f' p) (liftEventT f . eventT) uuid'
 
 
 deriveJSON (aesonPrefix camelCase) ''VerificationState

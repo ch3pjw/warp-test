@@ -37,6 +37,7 @@ import Eventful.Store.Postgresql
   ( postgresqlEventStoreWriter
   )
 
+import Events (unUuidFor)
 import Store.Types (Store, newStoreFrom)
 
 
@@ -77,8 +78,8 @@ newDBStore pool =
   in do
     DB.runSqlPool (DB.runMigration migrateSE2) pool
     newStoreFrom
-      (\uuid events -> void $
-          DB.runSqlPool (storeEvents writer uuid AnyPosition events) pool)
-      (\initialProjection uuid -> DB.runSqlPool
+      (\uuid' events -> void $
+          DB.runSqlPool (storeEvents writer (unUuidFor uuid') AnyPosition events) pool)
+      (\initialProjection uuid' -> DB.runSqlPool
           (getLatestStreamProjection reader $
-              versionedStreamProjection uuid initialProjection) pool)
+              versionedStreamProjection (unUuidFor uuid') initialProjection) pool)

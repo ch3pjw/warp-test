@@ -36,9 +36,10 @@ import Text.BlazeT.Renderer.Utf8 (renderHtml)
 import qualified Text.Email.Validate as Email
 
 import Css
+import Events (UuidFor(..))
 import Registration (
     EmailActor, aPoll, aSubmitEmailAddress, aVerify, aUnsubscribe,
-    usEmailAddress)
+    esEmailAddress)
 import ReadView (
     emailRegistrationEmailAddress,
     EntityField(EmailRegistrationId, EmailRegistrationVerified))
@@ -174,7 +175,9 @@ interestedResource
   :: (MonadReader StaticResources m, MonadIO m) => EmailActor -> Text
   -> Wai.ApplicationT m
 interestedResource actor name req sendResponse =
-    go (getVerb req) (UUID.fromText name)
+    -- FIXME: UuidFor makes the dangerous assumption that a valid UUID points to
+    -- a stream of the correct type...
+    go (getVerb req) (UuidFor <$> UUID.fromText name)
   where
     go (Just "verify") (Just uuid) = do
         present <- hasEmail uuid
@@ -196,7 +199,7 @@ interestedResource actor name req sendResponse =
     -- FIXME: this poll is a bit of a hack; when we have a read view, we should
     -- really be querying that.
     hasEmail uuid = liftIO (aPoll actor uuid) >>=
-        return . not . Text.null . usEmailAddress
+        return . not . Text.null . esEmailAddress
     verErrHtml =
       Templates.page ("Verification Failure") (Just notificationCss)
       Nothing $ do

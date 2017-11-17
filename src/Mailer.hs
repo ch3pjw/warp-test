@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Mailer
   ( SmtpSettings(..)
@@ -6,6 +7,8 @@ module Mailer
   , mailer
   ) where
 
+import Control.Exception (catch, SomeException)
+import Control.Monad.IO.Class (liftIO)
 import Data.DateTime (getCurrentTime)
 import Data.Monoid ((<>))
 import Data.Text (Text)
@@ -17,16 +20,19 @@ import qualified Network.HaskellNet.SMTP.SSL as SMTP
 import qualified Network.Mail.Mime as Mime
 
 import Events
-  ( EmailType(..)
+  ( UuidFor, unUuidFor
+  , RegistrationEmailType(..)
   , Event
   , EmailEvent(EmailSentEmailEvent)
   , emailEventToEvent
+  , timeStamp
+  , logEvents
   )
 import Store (Store)
 import Registration (
   EmailState(..), TimeStamped,
-  initialEmailProjection, liftProjection, liftAction,
-  condenseConsecutive, reactivelyRunAction, timeStampedAction,
+  initialEmailProjection, liftProjection, liftEventT,
+  condenseConsecutive, reactivelyRunEventTWithState,
   unsafeEventToEmailEvent)
 import Types (Password(..), EnvToggle(..))
 
@@ -114,34 +120,38 @@ confirmationEmail from to unsubscribeLink =
 
 generateEmail
   :: SenderAddress -> LinkFormatter -> LinkFormatter -> UUID -> EmailState
-  -> EmailType -> Mime.Mail
+  -> RegistrationEmailType -> Mime.Mail
 generateEmail senderAddr verifyLF unsubLF uuid userState emailType =
     case emailType of
       VerificationEmail -> verificationEmail from to vl ul
       ConfirmationEmail -> confirmationEmail from to ul
   where
-    to = Mime.Address Nothing $ usEmailAddress userState
+    to = Mime.Address Nothing $ esEmailAddress userState
     from = unSenderAddress senderAddr
     vl = verifyLF uuid
     ul = unsubLF uuid
 
 
 mailer
-  :: (UUID -> EmailState -> EmailType -> Mime.Mail) -> SmtpSettings
-  -> Store (TimeStamped Event) -> IO (Maybe UUID) -> IO ()
-mailer genEmail settings = reactivelyRunAction
+  :: (UUID -> EmailState -> RegistrationEmailType -> Mime.Mail)
+  -> SmtpSettings -> IO (Maybe (UuidFor (TimeStamped Event)))
+  -> Store (TimeStamped Event) -> IO ()
+mailer genEmail settings = reactivelyRunEventTWithState
     (liftProjection unsafeEventToEmailEvent initialEmailProjection)
-    getAction
+    getSendingEventT
   where
-    getAction uuid =
-      liftAction (fmap emailEventToEvent) $
-      timeStampedAction getCurrentTime $ \userState ->
+    getSendingEventT uuid' state =
+      timeStamp getCurrentTime $ liftEventT emailEventToEvent $
+        (liftIO $ doSending uuid' state) >>= logEvents
+    doSending uuid' state =
       let
-        pending = condenseConsecutive $ usPendingEmails userState
-        emails = genEmail uuid userState <$> pending
+        pending = condenseConsecutive $ esPendingEmails state
+        emails = genEmail (unUuidFor uuid') state <$> pending
       in
         -- FIXME: sendEmails CAN FAIL! E.g. if the server is dead or we send an
-        -- email to an invalid address. At the moment reactivelyRunAction will
-        -- just catch/hide that from us, and because we're just reacting to
-        -- current changes, we'll never repeat the email attempt!
+        -- email to an invalid address. Because we're just reacting to new
+        -- events, nothing will go through and send any pending emails that we
+        -- dropped.
         sendEmails settings emails >> return (EmailSentEmailEvent <$> pending)
+        `catch`
+        (\(_ :: SomeException) -> return [])

@@ -12,6 +12,7 @@ import Control.Concurrent.MVar
 import Control.Error.Util (note)
 import Control.Exception (bracket)
 import Control.Monad
+import Control.Monad.IO.Class (liftIO)
 import Data.DateTime (DateTime)
 import qualified Data.DateTime as DateTime
 import Data.Time.Clock (addUTCTime)
@@ -20,7 +21,18 @@ import qualified System.Timeout as Timeout
 
 import Eventful (uuidFromInteger)
 
+import Events
+  ( UuidFor(..), coerceUuidFor
+  , EmailAddress
+  , RegistrationEmailType(..)
+  , EmailEvent(..)
+  , Event
+  , EventT, liftToEvent
+  , logEvents
+  , timeStamp, TimeStamped
+  )
 import Registration
+import Store (newInMemoryStore, sSendShutdown, sGetNotificationChan, Store)
 
 
 spec :: Spec
@@ -53,59 +65,68 @@ spec = do
     describe "the subscription handler" $ do
       context "when the email service is running" $ do
         it "should not let me verify a non-existant email address" $
-          const pending
+          \ctx ->
+            let actor = tcActor ctx in do
+            aVerify actor uuid1'
+            state <- aPoll actor uuid1'
+            state `shouldSatisfy` emailStateVerification (Unverified)
 
         beforeWith beforeDoASub $
           context "once I have submitted my email address" $ do
             it "should have sent me an email and be waiting for my click" $
-              \(clock, actor, store, uo, eo, uuid) -> do
-                state <- sPoll store uuid
-                state `shouldSatisfy` userStateEmail "paul@concertdaw.co.uk"
+              \(ctx, uuid) -> do
+                state <- aPoll (tcActor ctx) uuid
+                state `shouldSatisfy` emailStateEmail "paul@concertdaw.co.uk"
                 state `shouldSatisfy`
-                    userStateVerification (Pending $ plusTimeout 0)
+                    emailStateVerification (Pending $ plusTimeout 0)
 
             it "should resend me a verification email if I submit again" $
-              \(clock, actor, store, uo, eo, uuid) -> do
-                clockSetTime clock 42
-                uuid' <- subAndGetEmail actor store eo
+              \(ctx, uuid) ->
+                let actor = tcActor ctx in do
+                clockSetTime (tcClock ctx) 42
+                uuid' <- subAndGetEmail actor (tcEmailChanOut ctx)
                 uuid' `shouldBe` uuid
-                state <- sPoll store uuid
-                state `shouldSatisfy` userStateEmail "paul@concertdaw.co.uk"
+                state <- aPoll actor uuid
+                state `shouldSatisfy` emailStateEmail "paul@concertdaw.co.uk"
                 state `shouldSatisfy`
-                    userStateVerification (Pending $ plusTimeout 42)
+                    emailStateVerification (Pending $ plusTimeout 42)
 
             it "should register me as verified when I respond to the email" $
-              \(clock, actor, store, uo, eo, uuid) -> do
-                aVerify actor store uuid
-                state <- sPoll store uuid
-                state `shouldSatisfy` userStateEmail "paul@concertdaw.co.uk"
-                state `shouldSatisfy` userStateVerification Verified
+              \(ctx, uuid) ->
+                let actor = tcActor ctx in do
+                aVerify actor uuid
+                state <- aPoll actor uuid
+                state `shouldSatisfy` emailStateEmail "paul@concertdaw.co.uk"
+                state `shouldSatisfy` emailStateVerification Verified
 
             it "should reject my verification if it is tardy" $
-              \(clock, actor, store, uo, eo, uuid) -> do
-                clockSetTime clock $ DateTime.toSeconds $ plusTimeout 2
-                aVerify actor store uuid
-                state <- sPoll store uuid
+              \(ctx, uuid) ->
+                let actor = tcActor ctx in do
+                clockSetTime (tcClock ctx) $ DateTime.toSeconds $ plusTimeout 2
+                aVerify actor uuid
+                state <- aPoll actor uuid
                 state `shouldSatisfy`
-                    userStateVerification (Pending $ plusTimeout 0)
+                    emailStateVerification (Pending $ plusTimeout 0)
 
             it "should accept a resubmission after rejecting my verification" $
-              \(clock, actor, store, uo, eo, uuid) -> do
-                clockSetTime clock $ DateTime.toSeconds $ plusTimeout 2
-                aVerify actor store uuid
-                uuid' <- subAndGetEmail actor store eo
-                aVerify actor store uuid
-                state <- sPoll store uuid
-                state `shouldSatisfy` userStateVerification Verified
+              \(ctx, uuid) ->
+                let actor = tcActor ctx in do
+                clockSetTime (tcClock ctx) $ DateTime.toSeconds $ plusTimeout 2
+                aVerify actor uuid
+                uuid' <- subAndGetEmail actor (tcEmailChanOut ctx)
+                aVerify actor uuid
+                state <- aPoll actor uuid
+                state `shouldSatisfy` emailStateVerification Verified
 
             it "should discard my email address when I unsubscribe" $
               checkUnsubscribed
         beforeWith (beforeDoASub >=> beforeDoAVerify) $
           context "once I have verified my email address" $ do
             it "should send me a confirmation email if I verify again" $
-              \(clock, actor, store, uo, eo, uuid) -> do
-                aSubmitEmailAddress actor store "paul@concertdaw.co.uk"
-                uuid' <- checkInbox eo "paul@concertdaw.co.uk" ConfirmationEmail
+              \(ctx, uuid) -> do
+                aSubmitEmailAddress (tcActor ctx) "paul@concertdaw.co.uk"
+                uuid' <- checkInbox (tcEmailChanOut ctx) "paul@concertdaw.co.uk"
+                    ConfirmationEmail
                 uuid' `shouldBe` uuid
 
             it "should discard my email address when I unsubscribe" $
@@ -132,18 +153,28 @@ spec = do
           \_ -> do
             pending
   where
-    subAndGetEmail a s eo = do
-        aSubmitEmailAddress a s "paul@concertdaw.co.uk"
-        checkInbox eo "paul@concertdaw.co.uk" VerificationEmail
-    checkUnsubscribed (c, a, s, uo, eo, u) = do
-        aUnsubscribe a s u
-        state <- sPoll s u
+    subAndGetEmail actor emailOutChan = do
+        aSubmitEmailAddress actor "paul@concertdaw.co.uk"
+        checkInbox emailOutChan "paul@concertdaw.co.uk" VerificationEmail
+    checkUnsubscribed (ctx, u') =
+        let actor = tcActor ctx in do
+        aUnsubscribe actor u'
+        state <- aPoll actor u'
         state `shouldBe` initialEmailState
-    beforeDoASub (c, a, s, uo, eo) = do
-        uuid <- subAndGetEmail a s eo
-        return (c, a, s, uo, eo, uuid)
-    beforeDoAVerify x@(c, a, s, uo, eo, u) = aVerify a s u >> return x
-    beforeDoUnsub x@(c, a, s, uo, eo, u) = aUnsubscribe a s u >> return x
+    beforeDoASub ctx = do
+        uuid <- subAndGetEmail (tcActor ctx) (tcEmailChanOut ctx)
+        return (ctx, uuid)
+    beforeDoAVerify x@(ctx, u') = aVerify (tcActor ctx) u' >> return x
+    beforeDoUnsub x@(ctx, u') = aUnsubscribe (tcActor ctx) u' >> return x
+
+
+data TestContext
+  = TestContext
+  { tcClock :: Clock
+  , tcActor :: EmailActor
+  , tcStore :: Store (TimeStamped Event)
+  , tcEmailChanOut :: U.OutChan Email
+  }
 
 
 
@@ -152,11 +183,11 @@ plusTimeout = addUTCTime verificationTimeout . DateTime.fromSeconds
 
 
 -- | Predicate for checking EmailState verificationState
-userStateVerification :: VerificationState -> EmailState -> Bool
-userStateVerification vs us = usVerificationState us == vs
+emailStateVerification :: VerificationState -> EmailState -> Bool
+emailStateVerification vs emailState = esVerificationState emailState == vs
 
-userStateEmail :: EmailAddress -> EmailState -> Bool
-userStateEmail e us = usEmailAddress us == e
+emailStateEmail :: EmailAddress -> EmailState -> Bool
+emailStateEmail e emailState = esEmailAddress emailState == e
 
 
 type ChanPair a = (U.InChan a, U.OutChan a)
@@ -176,25 +207,25 @@ newClock = do
       (\i -> modifyMVar_ mVar $ return . (+i))
 
 
-testContext ::
-  ((Clock, Actor, EmailStore, U.OutChan (Maybe UUID), U.OutChan Email) -> IO ())
-  -> IO ()
+testContext :: (TestContext -> IO ()) -> IO ()
 testContext spec = do
   clock <- newClock
-  store <- newStore initialEmailProjection
-  uo <- sGetNotificationChan store
-  uo' <- sGetNotificationChan store
+  store <- newInMemoryStore :: IO (Store (TimeStamped Event))
+  o <- sGetNotificationChan store
   (ei, eo) <- U.newChan
-  let actor = newActor "NaCl" $ clockGetTime clock
-  a <- async $ reactivelyRunAction
-      (tsMockSendEmails (aGetTime actor) ei) store (U.readChan uo')
+  let actor = newEmailActor "NaCl" (clockGetTime clock) store
+  a <- async $ reactivelyRunEventTWithState
+      (liftProjection unsafeEventToEmailEvent initialEmailProjection)
+      (tsMockSendEmails (aGetTime actor) ei) (U.readChan o) store
   link a
   bracket
-    (return (clock, actor, store, uo, eo))
+    (return $ TestContext clock actor store eo)
     (const $ sSendShutdown store >> wait a)
     spec
 
-uuid1 = uuidFromInteger 1
+
+uuid1' :: UuidFor EmailEvent
+uuid1' = UuidFor $ uuidFromInteger 1
 
 
 seconds :: (RealFrac a, Integral b) => a -> b
@@ -206,11 +237,14 @@ timeout n a = Timeout.timeout (seconds n) a >>= maybe (fail "timed out") return
 
 
 
-data Email = Email EmailAddress EmailType UUID deriving (Show, Eq)
+data Email =
+    Email EmailAddress RegistrationEmailType (UuidFor EmailEvent)
+    deriving (Show, Eq)
 
 -- | Times out if we don't get the expected "email"
 checkInbox ::
-    U.OutChan Email -> EmailAddress -> EmailType -> IO UUID
+    U.OutChan Email -> EmailAddress -> RegistrationEmailType
+    -> IO (UuidFor EmailEvent)
 checkInbox eo ea et =
     (timeout 0.1 $ U.readChan eo) >>= checkAndGet
   where
@@ -218,14 +252,19 @@ checkInbox eo ea et =
         | (a, t) == (ea, et) = return u
         | otherwise = fail $ "Bad email: " ++ show (a, t)
 
-mockSendEmails :: U.InChan Email -> Action EmailState UserEvent
-mockSendEmails i u s =
-    mapM sendEmail . condenseConsecutive $ usPendingEmails s
+mockSendEmails
+  :: U.InChan Email -> UuidFor (TimeStamped EmailEvent) -> EmailState
+  -> EventT EmailEvent IO ()
+mockSendEmails i uuid' s =
+    mapM_ sendEmail . condenseConsecutive $ esPendingEmails s
   where
     sendEmail emailType = do
-        U.writeChan i $ Email addr emailType u
-        return $ Emailed emailType
-    addr = usEmailAddress s
+        liftIO $ U.writeChan i $ Email addr emailType (coerceUuidFor uuid')
+        logEvents [EmailSentEmailEvent emailType]
+    addr = esEmailAddress s
 
-tsMockSendEmails :: IO DateTime -> U.InChan Email -> Action EmailState (TimeStamped UserEvent)
-tsMockSendEmails getT i = timeStampedAction getT (mockSendEmails i)
+tsMockSendEmails
+  :: IO DateTime -> U.InChan Email -> UuidFor (TimeStamped Event)
+  -> EmailState -> EventT (TimeStamped Event) IO ()
+tsMockSendEmails getT i uuid' emailState =
+  timeStamp getT $ liftToEvent $ mockSendEmails i (coerceUuidFor uuid') emailState

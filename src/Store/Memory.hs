@@ -9,6 +9,7 @@ import Eventful.Store.Memory (
   eventMapTVar, tvarEventStoreWriter, tvarEventStoreReader,
   ExpectedPosition(..), storeEvents)
 
+import Events (unUuidFor)
 import Store.Types (Store, newStoreFrom)
 
 newInMemoryStore :: IO (Store event)
@@ -19,6 +20,6 @@ newInMemoryStore = do
       r = tvarEventStoreReader tvar
     -- FIXME: AnyPosition always valid?
     newStoreFrom
-      (\uuid -> void . atomically . storeEvents w uuid AnyPosition)
-      (\initialProjection uuid -> atomically $ getLatestStreamProjection r $
-          versionedStreamProjection uuid initialProjection)
+      (\uuid' -> void . atomically . storeEvents w (unUuidFor uuid') AnyPosition)
+      (\initialProjection uuid' -> atomically $ getLatestStreamProjection r $
+          versionedStreamProjection (unUuidFor uuid') initialProjection)
