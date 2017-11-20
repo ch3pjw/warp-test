@@ -16,9 +16,9 @@ module Registration
   , getDatabaseConfig
   , untilNothing
   , RegistrationConfig, rcDatabaseConfig, rcUuidSalt
-  , initialEmailProjection, liftProjection, liftEventT
+  , initialEmailProjection
   , EmailStore
-  , unsafeEventToEmailEvent
+  , unsafeEventToEmailEvent, slightlySaferEventToEmailEvent
   ) where
 
 import Prelude hiding (fail)
@@ -26,12 +26,12 @@ import Control.Monad hiding (fail)
 import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Fail (MonadFail, fail)
 import Control.Monad.IO.Class
-import Control.Monad.Trans.Writer (WriterT(..))
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Aeson.TH (deriveJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
 import qualified Data.ByteString as BS
 import Data.DateTime (DateTime)
+import Data.Functor.Contravariant (contramap)
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -45,15 +45,16 @@ import Database.Persist.URL (fromDatabaseUrl)
 import qualified Database.Persist.Postgresql as DB
 
 import Eventful (
-  Projection(..), CommandHandler(..)
+  Projection(..), ExpectedPosition(AnyPosition)
   )
 
 import Events (
   EmailAddress, RegistrationEmailType(..), EmailEvent(..), UuidFor(..),
-  coerceUuidFor, Event(..), emailEventToEvent, decomposeEvent, TimeStamped,
-  EventT, logEvents)
+  Event(..), decomposeEvent, TimeStamped,
+  EventT, logEvents', getState, mapEvents, toEvent)
 
-import Store (Store, sRunEventTWithState)
+import Store (Store, sRunEventT)
+
 
 
 type Salt = Text
@@ -116,79 +117,65 @@ type EmailProjection = Projection EmailState (TimeStamped EmailEvent)
 initialEmailProjection :: EmailProjection
 initialEmailProjection = Projection initialEmailState updateEmailState
 
+type EmailStore = Store IO (TimeStamped EmailEvent)
 
-data EmailCommand
-  = Submit EmailAddress
-  | Verify
-  | Unsubscribe
-  deriving (Show, Eq)
-
-
-handleEmailCommand ::
-  DateTime -> EmailState -> EmailCommand -> [TimeStamped EmailEvent]
--- Am I missing the point? This handler doesn't seem to do much. Most of the
--- logic is in the state machine defined by updateRegistrationState, and we
--- can't have any side effects here...
-handleEmailCommand now _ (Submit e) = [(now, EmailAddressSubmittedEmailEvent e)]
-handleEmailCommand now s Verify =
-  if withinValidationPeriod now s
-  then [(now, EmailAddressVerifiedEmailEvent)]
-  else []
-handleEmailCommand now s Unsubscribe =
-  if not . Text.null $ esEmailAddress s
-  then [(now, EmailAddressRemovedEmailEvent)]
-  else []
-
-
-type EmailCommandHandler =
-  CommandHandler EmailState (TimeStamped EmailEvent) EmailCommand
-
-userCommandHandler :: DateTime -> EmailCommandHandler
-userCommandHandler now =
-  CommandHandler (handleEmailCommand now) initialEmailProjection
-
-
-type EmailStore = Store (TimeStamped EmailEvent)
-
-
-type EmailAction m a = EmailState -> EventT (TimeStamped EmailEvent) m a
-
-emailCommandAction
-  :: (MonadIO m) => IO DateTime -> EmailCommand -> EmailAction m ()
-emailCommandAction getT cmd = \s -> do
-    t <- liftIO getT
-    logEvents $ commandHandlerHandler (userCommandHandler t) s cmd
+type EmailAction m a = EventT (TimeStamped EmailEvent) EmailState m a
 
 
 data EmailActor
   = EmailActor
   { aGetTime :: IO DateTime
   , aSubmitEmailAddress :: EmailAddress -> IO ()
-  , aVerify :: UuidFor EmailEvent -> IO ()
+  , aVerify :: UuidFor EmailEvent -> IO VerificationState
   , aUnsubscribe :: UuidFor EmailEvent -> IO ()
   , aPoll :: UuidFor EmailEvent -> IO EmailState
   }
 
-newEmailActor :: Salt -> IO DateTime -> Store (TimeStamped Event) -> EmailActor
+newEmailActor
+    :: Salt -> IO DateTime -> Store IO (TimeStamped Event) -> EmailActor
 newEmailActor salt getT store = EmailActor
     getT
-    (\e -> withUpdate (act $ Submit e) (hashEmail salt e))
-    (\u -> withUpdate (act Verify) u)
-    (\u -> withUpdate (act Unsubscribe) u)
-    (\u -> sRunEventTWithState store
-        (liftProjection unsafeEventToEmailEvent initialEmailProjection)
-        return
-        (coerceUuidFor u))
+    (go . submitEmail)
+    (go . verifyEmail)
+    (go . unsubEmail)
+    (go . getState . unUuidFor)
   where
-    act :: EmailCommand -> EmailAction IO ()
-    act = emailCommandAction getT
-    withUpdate :: EmailAction IO () -> UuidFor EmailEvent -> IO ()
-    withUpdate a u =
-        liftedStoreRunEventTWithState (fmap emailEventToEvent)
-        unsafeEventToEmailEvent store initialEmailProjection a (coerceUuidFor u)
+    go = sRunEventT store initP . liftEventT
+    initP = contramap unsafeEventToEmailEvent initialEmailProjection
+    liftEventT = mapEvents (fmap toEvent) slightlySaferEventToEmailEvent
+    submitEmail :: (MonadIO m) => EmailAddress -> EmailAction m ()
+    submitEmail e = do
+        t <- liftIO getT
+        logEvents' (unUuidFor $ hashEmail salt e) AnyPosition
+            [(t, EmailAddressSubmittedEmailEvent e)]
+    verifyEmail
+        :: (MonadIO m)
+        => UuidFor EmailEvent -> EmailAction m VerificationState
+    verifyEmail uuid' =
+      let uuid = unUuidFor uuid' in do
+        t <- liftIO getT
+        emailState <- getState uuid
+        if withinValidationPeriod t emailState
+          then
+            logEvents' uuid AnyPosition [(t, EmailAddressVerifiedEmailEvent)]
+            >> return Verified
+          else
+            return $ esVerificationState emailState
+    unsubEmail :: (MonadIO m) => UuidFor EmailEvent -> EmailAction m ()
+    unsubEmail uuid' =
+      let uuid = unUuidFor uuid' in do
+        t <- liftIO getT
+        emailState <- getState uuid
+        when (not . Text.null $ esEmailAddress emailState) $
+          logEvents' uuid AnyPosition [(t, EmailAddressRemovedEmailEvent)]
 
 unsafeEventToEmailEvent :: TimeStamped Event -> TimeStamped EmailEvent
 unsafeEventToEmailEvent = fmap $ decomposeEvent id (error "no!") (error "wrong!")
+
+slightlySaferEventToEmailEvent
+    :: TimeStamped Event -> Maybe (TimeStamped EmailEvent)
+slightlySaferEventToEmailEvent =
+    traverse $ decomposeEvent Just (const Nothing) (const Nothing)
 
 hashEmail :: Salt -> EmailAddress -> UuidFor EmailEvent
 hashEmail salt email =
@@ -203,11 +190,11 @@ untilNothing wait f =
 
 reactivelyRunEventTWithState
   :: (MonadIO m)
-  => Projection state event -> (UuidFor event -> state -> EventT event m ())
-  -> (IO (Maybe (UuidFor event))) -> Store event -> m ()
-reactivelyRunEventTWithState projection f waitUuid' store = do
-    untilNothing (waitUuid') $ \uuid' ->
-      sRunEventTWithState store projection (f uuid') uuid'
+  => Projection state event
+  -> (x -> EventT event state m ())
+  -> IO (Maybe x) -> Store m event -> m ()
+reactivelyRunEventTWithState projection f waitX store = do
+    untilNothing waitX $ \x -> sRunEventT store projection (f x)
 
 
 newtype CanFail a = CanFail
@@ -237,31 +224,5 @@ instance FromEnv RegistrationConfig where
 
 getDatabaseConfig :: IO DB.PostgresConf
 getDatabaseConfig = join $ fromDatabaseUrl 1 <$> getEnv "DATABASE_URL"
-
--- | Intended to help lift a store that acts on a subset of the global set of
---   events into the global space. In this case event is the "smaller" event
---   type and event' the "bigger".
-
-liftEventT
-  :: (Monad m) => (event -> event') -> EventT event m a -> EventT event' m a
-liftEventT f eventT = WriterT $ do
-    (result, events) <- runWriterT eventT
-    return (result, f <$> events)
-
-liftProjection
-  :: (event' -> event) -> Projection state event -> Projection state event'
-liftProjection f (Projection initialState updateState) =
-    Projection initialState updateState'
-  where
-    updateState' state = updateState state . f
-
-liftedStoreRunEventTWithState
-  :: (MonadIO m)
-  => (event -> event') -> (event' -> event) -> Store event'
-  -> Projection state event -> (state -> EventT event m a) -> UuidFor event'
-  -> m a
-liftedStoreRunEventTWithState f f' s p eventT uuid' =
-    sRunEventTWithState s (liftProjection f' p) (liftEventT f . eventT) uuid'
-
 
 deriveJSON (aesonPrefix camelCase) ''VerificationState

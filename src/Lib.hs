@@ -183,6 +183,8 @@ interestedResource actor name req sendResponse =
         present <- hasEmail uuid
         if present
         then do
+          -- FIXME: this now comes back with a result saying if you've
+          -- successfully verified:
           liftIO $ aVerify actor uuid
           verificationResponse req sendResponse
         else htmlResponse' HTTP.status404 verErrHtml req sendResponse
