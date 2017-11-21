@@ -27,7 +27,6 @@ import Data.Aeson.TH (deriveJSON)
 import qualified Data.Aeson.Types as T
 import Data.DateTime (DateTime)
 import Data.Maybe (mapMaybe)
-import Data.Functor.Contravariant (contramap)
 import Data.Text (Text)
 import Data.UUID (UUID)
 
@@ -84,6 +83,7 @@ instance ToJSON UserAgentString where
 instance FromJSON UserAgentString where
     parseJSON = T.withText "UserAgentString" $ pure . UserAgentString
 
+
 data SessionEvent
   = SessionRequestedSessionEvent EmailAddress
   | SessionAssociatedWithAccountSessionEvent (UuidFor AccountEvent)
@@ -127,23 +127,22 @@ type StoreEvents key event m =
 
 type EventT event state m
   = ReaderT
-  ( Projection state event
-  , EventStoreReader UUID EventVersion m (StreamEvent UUID EventVersion event)
+  ( EventStoreReader UUID EventVersion m (StreamEvent UUID EventVersion event)
   , StoreEvents UUID event m
   ) m
 
 runEventT
     :: (Monad m)
-    => EventT event state m a -> Projection state event
+    => EventT event state m a
     -> EventStoreReader UUID EventVersion m (StreamEvent UUID EventVersion event)
     -> StoreEvents UUID event m -> m a
-runEventT et proj esr se = runReaderT et (proj, esr, se)
+runEventT et esr se = runReaderT et (esr, se)
 
 logEvents
     :: (Monad m)
     => UUID -> ExpectedPosition EventVersion -> [event]
     -> EventT event state m (Maybe (EventWriteError EventVersion))
-logEvents uuid pos events = ask >>= (\(_, _, se) -> lift $ se uuid pos events)
+logEvents uuid pos events = ask >>= (\(_, se) -> lift $ se uuid pos events)
 
 logEvents_
     :: (Monad m)
@@ -153,9 +152,8 @@ logEvents_ uuid pos = void . logEvents uuid pos
 
 getState
     :: (Monad m)
-    => UUID
-    -> EventT event state m state
-getState key = ask >>= (\(proj, reader, _) -> lift $
+    => Projection state event -> UUID -> EventT event state m state
+getState proj key = ask >>= (\(reader, _) -> lift $
     streamProjectionState <$>
     getLatestStreamProjection reader (versionedStreamProjection key proj))
 
@@ -165,11 +163,8 @@ mapEvents
     -> EventT event' state m a
 mapEvents f f' et = withReaderT convert et
   where
-    convert (projection, reader, storeEvents) =
-      let
-        storeEvents' k p = storeEvents k p . fmap f
-      in
-      (contramap f projection, overReader reader, storeEvents')
+    convert (reader, storeEvents) =
+      (overReader reader, \k p -> storeEvents k p . fmap f)
     -- reader is a functor that internally deals in a list of events. We want to
     -- be able to drop events from that list if they're not pertinent to
     -- reconsituting our state, so we define the following:

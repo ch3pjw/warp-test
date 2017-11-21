@@ -10,7 +10,6 @@ module Mailer
 import Control.Exception (catch, SomeException)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.DateTime (getCurrentTime)
-import Data.Functor.Contravariant (contramap)
 import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Format (format)
@@ -35,7 +34,7 @@ import Registration (
   EmailState(..), TimeStamped,
   initialEmailProjection,
   condenseConsecutive, reactivelyRunEventTWithState,
-  unsafeEventToEmailEvent, slightlySaferEventToEmailEvent)
+  slightlySaferEventToEmailEvent)
 import Types (Password(..), EnvToggle(..))
 
 
@@ -139,14 +138,13 @@ mailer
   => (UUID -> EmailState -> RegistrationEmailType -> Mime.Mail)
   -> SmtpSettings -> IO (Maybe (UuidFor (TimeStamped Event)))
   -> Store m (TimeStamped Event) -> m ()
-mailer genEmail settings = reactivelyRunEventTWithState
-    (contramap unsafeEventToEmailEvent initialEmailProjection)
-    getSendingEventT
+mailer genEmail settings = reactivelyRunEventTWithState getSendingEventT
   where
     getSendingEventT uuid' =
         mapEvents (fmap toEvent) slightlySaferEventToEmailEvent $ do
           t <- liftIO getCurrentTime
-          getState (unUuidFor uuid') >>= liftIO . doSending uuid' >>=
+          getState initialEmailProjection (unUuidFor uuid') >>=
+            liftIO . doSending uuid' >>=
             logEvents_ (unUuidFor uuid') AnyPosition . fmap ((,) t)
     doSending uuid' state =
       let

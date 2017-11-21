@@ -77,7 +77,7 @@ newSessionActor getT = SessionActor requestSession signIn signOut
         return uuid'
     signIn uuid' uaString = do
         t <- liftIO getT
-        sessionState <- getState (unUuidFor uuid')
+        sessionState <- getState initialSessionProjection (unUuidFor uuid')
         if withinActivationPeriod t sessionState
           then do
               logEvents_ (unUuidFor uuid') AnyPosition
@@ -90,7 +90,7 @@ newSessionActor getT = SessionActor requestSession signIn signOut
         -- We query the existing session state so that malicious clients can't
         -- note their sign-out link and keep spamming us with sign-out requests
         -- to fill up the DB:
-        sessionState <- getState (unUuidFor uuid')
+        sessionState <- getState initialSessionProjection (unUuidFor uuid')
         when (ssStage sessionState /= Terminated) $
           logEvents_ (unUuidFor uuid') AnyPosition
             [(t, SessionSignedOutSessionEvent)]

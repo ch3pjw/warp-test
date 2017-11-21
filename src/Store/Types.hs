@@ -18,9 +18,7 @@ data Store m event = Store
   -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
   -- actually writing to the store...
   , sSendShutdown :: IO ()
-  , sRunEventT
-      :: forall state a. (MonadIO m)
-      => Projection state event -> EventT event state m a -> m a
+  , sRunEventT :: forall state a. (MonadIO m) => EventT event state m a -> m a
   }
 
 newStoreFrom
@@ -37,8 +35,8 @@ newStoreFrom writer reader = do
         (U.writeChan i Nothing)
         (_runEventT i)
   where
-    _runEventT i projection elt = do
-        runEventT elt projection reader $ storeAndPublishEvents
+    _runEventT i elt = do
+        runEventT elt reader $ storeAndPublishEvents
           writer [\uuid event -> liftIO $ U.writeChan i $ Just uuid]
 
 liftEventStoreWriter

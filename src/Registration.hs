@@ -138,10 +138,9 @@ newEmailActor salt getT store = EmailActor
     (go . submitEmail)
     (go . verifyEmail)
     (go . unsubEmail)
-    (go . getState . unUuidFor)
+    (go . getState initialEmailProjection . unUuidFor)
   where
-    go = sRunEventT store initP . liftEventT
-    initP = contramap unsafeEventToEmailEvent initialEmailProjection
+    go = sRunEventT store . liftEventT
     liftEventT = mapEvents (fmap toEvent) slightlySaferEventToEmailEvent
     submitEmail :: (MonadIO m) => EmailAddress -> EmailAction m ()
     submitEmail e = do
@@ -154,7 +153,7 @@ newEmailActor salt getT store = EmailActor
     verifyEmail uuid' =
       let uuid = unUuidFor uuid' in do
         t <- liftIO getT
-        emailState <- getState uuid
+        emailState <- getState initialEmailProjection uuid
         if withinValidationPeriod t emailState
           then
             logEvents_ uuid AnyPosition [(t, EmailAddressVerifiedEmailEvent)]
@@ -165,7 +164,7 @@ newEmailActor salt getT store = EmailActor
     unsubEmail uuid' =
       let uuid = unUuidFor uuid' in do
         t <- liftIO getT
-        emailState <- getState uuid
+        emailState <- getState initialEmailProjection uuid
         when (not . Text.null $ esEmailAddress emailState) $
           logEvents_ uuid AnyPosition [(t, EmailAddressRemovedEmailEvent)]
 
@@ -190,11 +189,10 @@ untilNothing wait f =
 
 reactivelyRunEventTWithState
   :: (MonadIO m)
-  => Projection state event
-  -> (x -> EventT event state m ())
+  => (x -> EventT event state m ())
   -> IO (Maybe x) -> Store m event -> m ()
-reactivelyRunEventTWithState projection f waitX store = do
-    untilNothing waitX $ \x -> sRunEventT store projection (f x)
+reactivelyRunEventTWithState f waitX store = do
+    untilNothing waitX $ \x -> sRunEventT store (f x)
 
 
 newtype CanFail a = CanFail

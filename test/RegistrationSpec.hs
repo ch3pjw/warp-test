@@ -216,7 +216,6 @@ testContext spec = do
     (ei, eo) <- U.newChan
     let actor = newEmailActor "NaCl" (clockGetTime clock) store
     a <- async $ reactivelyRunEventTWithState
-        (contramap unsafeEventToEmailEvent initialEmailProjection)
         (\u -> liftToEvent $ mockSendEmails (aGetTime actor) ei u)
         (U.readChan o)
         store
@@ -261,7 +260,7 @@ mockSendEmails
   :: IO DateTime -> U.InChan Email -> UUID
   -> EventT (TimeStamped EmailEvent) EmailState IO ()
 mockSendEmails getT i uuid = do
-    s <- getState uuid
+    s <- getState initialEmailProjection uuid
     mapM_ (sendEmail s) $ condenseConsecutive $ esPendingEmails s
   where
     sendEmail s emailType = do
