@@ -29,6 +29,7 @@ library
                      , Router
                      , Sessions
                      , Sessions.Model
+                     , Sessions.ReadViews
                      , Store
                      , Store.Types
                      , Store.Db

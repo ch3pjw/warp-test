@@ -13,6 +13,7 @@ module ReadView
   , simpleReadView
   , viewWorker
   , runWorkers
+  , liftReadView
   ) where
 
 import qualified Control.Concurrent.Async as A
@@ -141,3 +142,9 @@ runWorkers rvs pool getWait = do
     mapM_ A.wait as
   where
     runViewWorker rv = A.async $ getWait >>= viewWorker rv pool
+
+liftReadView :: (event' -> Maybe event) -> ReadView event -> ReadView event'
+liftReadView f rv = rv { rvUpdate = rvUpdate' }
+  where
+    rvUpdate' sn uuid version event' =
+      maybe (return ()) (rvUpdate rv sn uuid version) (f event')
