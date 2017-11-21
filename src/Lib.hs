@@ -39,9 +39,7 @@ import Css
 import Events (UuidFor(..))
 import Registration (
     EmailActor, aPoll, aSubmitEmailAddress, aVerify, aUnsubscribe,
-    esEmailAddress)
-import ReadView (
-    emailRegistrationEmailAddress,
+    esEmailAddress, emailRegistrationEmailAddress,
     EntityField(EmailRegistrationId, EmailRegistrationVerified))
 import qualified Templates
 import Router

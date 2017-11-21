@@ -3,3 +3,4 @@ module Registration
   ) where
 
 import Registration.Model as X
+import Registration.ReadViews as X

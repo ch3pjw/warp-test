@@ -25,6 +25,7 @@ library
                      , ReadView
                      , Registration
                      , Registration.Model
+                     , Registration.ReadViews
                      , Router
                      , Sessions
                      , Sessions.Model

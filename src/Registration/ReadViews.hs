@@ -1,14 +1,33 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 
-module Registration.ReadViews where
+module Registration.ReadViews
+  ( DB.EntityField(..)
+  , emailRegistrationEmailAddress
+  , userStateReadView
+  ) where
 
+import Control.Monad (void)
 import Data.UUID (UUID)
+import Database.Persist.Postgresql ((=.), (==.))
+import qualified Database.Persist.Postgresql as DB
 import Database.Persist.TH (
     share, mkPersist, sqlSettings, mkMigrate, persistLowerCase)
 
-import Events (EmailAddress)
-import ReadView (simpleReadView)
+import Events
+  ( EmailAddress
+  , Event( EmailAddressSubmittedEvent
+         , EmailAddressVerifiedEvent
+         , EmailAddressRemovedEvent
+         )
+  , TimeStamped
+  )
+import ReadView (ReadView, simpleReadView)
 
 share [mkPersist sqlSettings, mkMigrate "migrateER"] [persistLowerCase|
 EmailRegistration
