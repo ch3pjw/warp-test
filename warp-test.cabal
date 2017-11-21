@@ -23,6 +23,7 @@ library
                      , Middleware
                      , ReadView
                      , Registration
+                     , Registration.Model
                      , Router
                      , Sessions
                      , Sessions.Model
