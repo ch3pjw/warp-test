@@ -258,7 +258,7 @@ checkInbox eo ea et =
 
 mockSendEmails
   :: IO DateTime -> U.InChan Email -> UUID
-  -> EventT (TimeStamped EmailEvent) EmailState IO ()
+  -> EventT (TimeStamped EmailEvent) IO ()
 mockSendEmails getT i uuid = do
     s <- getState initialEmailProjection uuid
     mapM_ (sendEmail s) $ condenseConsecutive $ esPendingEmails s

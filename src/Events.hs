@@ -125,7 +125,7 @@ type StoreEvents key event m =
     key -> ExpectedPosition EventVersion -> [event]
     -> m (Maybe (EventWriteError EventVersion))
 
-type EventT event state m
+type EventT event m
   = ReaderT
   ( EventStoreReader UUID EventVersion m (StreamEvent UUID EventVersion event)
   , StoreEvents UUID event m
@@ -133,7 +133,7 @@ type EventT event state m
 
 runEventT
     :: (Monad m)
-    => EventT event state m a
+    => EventT event m a
     -> EventStoreReader UUID EventVersion m (StreamEvent UUID EventVersion event)
     -> StoreEvents UUID event m -> m a
 runEventT et esr se = runReaderT et (esr, se)
@@ -141,26 +141,26 @@ runEventT et esr se = runReaderT et (esr, se)
 logEvents
     :: (Monad m)
     => UUID -> ExpectedPosition EventVersion -> [event]
-    -> EventT event state m (Maybe (EventWriteError EventVersion))
+    -> EventT event m (Maybe (EventWriteError EventVersion))
 logEvents uuid pos events = ask >>= (\(_, se) -> lift $ se uuid pos events)
 
 logEvents_
     :: (Monad m)
     => UUID -> ExpectedPosition EventVersion -> [event]
-    -> EventT event state m ()
+    -> EventT event m ()
 logEvents_ uuid pos = void . logEvents uuid pos
 
 getState
     :: (Monad m)
-    => Projection state event -> UUID -> EventT event state m state
+    => Projection state event -> UUID -> EventT event m state
 getState proj key = ask >>= (\(reader, _) -> lift $
     streamProjectionState <$>
     getLatestStreamProjection reader (versionedStreamProjection key proj))
 
 mapEvents
     :: (Monad m) => (event -> event') -> (event' -> Maybe event)
-    -> EventT event state m a
-    -> EventT event' state m a
+    -> EventT event m a
+    -> EventT event' m a
 mapEvents f f' et = withReaderT convert et
   where
     convert (reader, storeEvents) =
@@ -174,8 +174,8 @@ mapEvents f f' et = withReaderT convert et
 liftToEvent
     :: (Monad m, ToEvent event)
     => (Event -> Maybe event)
-    -> EventT event state m a
-    -> EventT Event state m a
+    -> EventT event m a
+    -> EventT Event m a
 liftToEvent f' = mapEvents toEvent f'
 
 type TimeStamped a = (DateTime, a)

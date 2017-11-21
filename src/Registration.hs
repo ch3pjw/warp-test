@@ -119,7 +119,7 @@ initialEmailProjection = Projection initialEmailState updateEmailState
 
 type EmailStore = Store IO (TimeStamped EmailEvent)
 
-type EmailAction m a = EventT (TimeStamped EmailEvent) EmailState m a
+type EmailAction m a = EventT (TimeStamped EmailEvent) m a
 
 
 data EmailActor
@@ -189,7 +189,7 @@ untilNothing wait f =
 
 reactivelyRunEventTWithState
   :: (MonadIO m)
-  => (x -> EventT event state m ())
+  => (x -> EventT event m ())
   -> IO (Maybe x) -> Store m event -> m ()
 reactivelyRunEventTWithState f waitX store = do
     untilNothing waitX $ \x -> sRunEventT store (f x)

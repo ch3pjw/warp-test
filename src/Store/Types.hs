@@ -18,7 +18,7 @@ data Store m event = Store
   -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
   -- actually writing to the store...
   , sSendShutdown :: IO ()
-  , sRunEventT :: forall state a. (MonadIO m) => EventT event state m a -> m a
+  , sRunEventT :: forall a. (MonadIO m) => EventT event m a -> m a
   }
 
 newStoreFrom

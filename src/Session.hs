@@ -53,7 +53,7 @@ updateSessionState s _ = s
 initialSessionProjection :: Projection SessionState (TimeStamped SessionEvent)
 initialSessionProjection = Projection initialSessionState updateSessionState
 
-type SessionEventT = EventT (TimeStamped SessionEvent) SessionState IO
+type SessionEventT = EventT (TimeStamped SessionEvent) IO
 
 data SessionActor
   = SessionActor
