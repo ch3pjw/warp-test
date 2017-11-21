@@ -12,9 +12,7 @@ module Registration.Model
     initialEmailState
   , EmailActor , newEmailActor
   , aPoll, aSubmitEmailAddress, aVerify, aUnsubscribe, aGetTime
-  , reactivelyRunEventT
   , getDatabaseConfig
-  , untilNothing
   , RegistrationConfig, rcDatabaseConfig, rcUuidSalt
   , initialEmailProjection
   , EmailStore
@@ -181,19 +179,6 @@ hashEmail salt email =
     UuidFor .
     UUIDv5.generateNamed UUIDv5.namespaceOID . BS.unpack . SHA256.hash $
     (Text.encodeUtf8 $ salt <> email)
-
-untilNothing :: (MonadIO m) => IO (Maybe a) -> (a -> m ()) -> m ()
-untilNothing wait f =
-    liftIO wait >>=
-    maybe (return ()) (\a -> f a >> untilNothing wait f)
-
-reactivelyRunEventT
-  :: (MonadIO m)
-  => (x -> EventT event m ())
-  -> IO (Maybe x) -> Store m event -> m ()
-reactivelyRunEventT f waitX store = do
-    untilNothing waitX $ \x -> sRunEventT store (f x)
-
 
 newtype CanFail a = CanFail
   { unCanFail :: Either String a

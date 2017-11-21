@@ -27,11 +27,11 @@ import Events
   , Event, toEvent
   , EmailEvent(EmailSentEmailEvent))
 import EventT (mapEvents, getState, logEvents_)
-import Store (Store)
+import Store (Store, reactivelyRunEventT)
 import Registration (
   EmailState(..), TimeStamped,
   initialEmailProjection,
-  condenseConsecutive, reactivelyRunEventT,
+  condenseConsecutive,
   slightlySaferEventToEmailEvent)
 import Types (Password(..), EnvToggle(..))
 

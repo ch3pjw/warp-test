@@ -34,7 +34,9 @@ import EventT
   , getState, logEvents
   )
 import Registration
-import Store (newInMemoryStore, sSendShutdown, sGetNotificationChan, Store)
+import Store
+  ( newInMemoryStore, sSendShutdown, sGetNotificationChan, Store
+  , untilNothing, reactivelyRunEventT)
 
 
 spec :: Spec

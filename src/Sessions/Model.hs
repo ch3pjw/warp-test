@@ -14,6 +14,7 @@ import Events
   ( EmailAddress, SessionEvent(..), UuidFor(..), UserAgentString, TimeStamped)
 import EventT
   ( EventT, logEvents, logEvents_, getState)
+import Store (reactivelyRunEventT)
 
 
 sessionActivationTimeout :: NominalDiffTime

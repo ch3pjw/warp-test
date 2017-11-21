@@ -45,8 +45,7 @@ import Events
          , EmailAddressRemovedEvent
          )
   )
-import Registration (TimeStamped, untilNothing)
-import Store (eventStoreConfig)
+import Store (eventStoreConfig, untilNothing)
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateVSN"] [persistLowerCase|

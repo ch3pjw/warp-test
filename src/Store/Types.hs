@@ -1,12 +1,15 @@
 {-# LANGUAGE Rank2Types #-}
 
-module Store.Types where
+module Store.Types
+  ( Store(..), newStoreFrom, liftEventStoreWriter, liftEventStoreReader
+  , untilNothing, reactivelyRunEventT
+  ) where
 
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.UUID (UUID)
 import Eventful (
-    Projection, EventVersion,
+    EventVersion,
     EventStoreReader(..), EventStoreWriter(..), EventWriteError,
     storeAndPublishEvents)
 import Eventful.Store.Class (StreamEvent)
@@ -51,3 +54,16 @@ liftEventStoreReader
   -> EventStoreReader key pos m event
   -> EventStoreReader key pos n event
 liftEventStoreReader f (EventStoreReader r) = EventStoreReader $ f . r
+
+
+untilNothing :: (MonadIO m) => IO (Maybe a) -> (a -> m ()) -> m ()
+untilNothing wait f =
+    liftIO wait >>=
+    maybe (return ()) (\a -> f a >> untilNothing wait f)
+
+reactivelyRunEventT
+  :: (MonadIO m)
+  => (x -> EventT event m ())
+  -> IO (Maybe x) -> Store m event -> m ()
+reactivelyRunEventT f waitX store =
+    untilNothing waitX $ \x -> sRunEventT store (f x)
