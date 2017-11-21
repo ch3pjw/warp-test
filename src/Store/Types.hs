@@ -11,7 +11,7 @@ import Eventful (
     storeAndPublishEvents)
 import Eventful.Store.Class (StreamEvent)
 
-import Events (EventT, runEventT)
+import EventT (EventT, runEventT)
 
 data Store m event = Store
   { sGetNotificationChan :: IO (U.OutChan (Maybe UUID))

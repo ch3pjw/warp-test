@@ -27,9 +27,11 @@ import Events
   , RegistrationEmailType(..)
   , EmailEvent(..)
   , Event, toEvent
-  , EventT, mapEvents
-  , getState, logEvents
   , TimeStamped
+  )
+import EventT
+  ( EventT, mapEvents
+  , getState, logEvents
   )
 import Registration
 import Store (newInMemoryStore, sSendShutdown, sGetNotificationChan, Store)

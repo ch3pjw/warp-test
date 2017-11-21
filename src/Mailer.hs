@@ -25,10 +25,8 @@ import Events
   ( UuidFor, unUuidFor
   , RegistrationEmailType(..)
   , Event, toEvent
-  , EmailEvent(EmailSentEmailEvent)
-  , mapEvents
-  , getState, logEvents_
-  )
+  , EmailEvent(EmailSentEmailEvent))
+import EventT (mapEvents, getState, logEvents_)
 import Store (Store)
 import Registration (
   EmailState(..), TimeStamped,

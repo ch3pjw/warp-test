@@ -11,8 +11,9 @@ import Data.UUID.V4 (nextRandom)
 import Eventful (ExpectedPosition(..), Projection(..))
 
 import Events
-  ( EmailAddress, SessionEvent(..), EventT, logEvents
-  , logEvents_, getState, UuidFor(..), UserAgentString, TimeStamped)
+  ( EmailAddress, SessionEvent(..), UuidFor(..), UserAgentString, TimeStamped)
+import EventT
+  ( EventT, logEvents, logEvents_, getState)
 
 
 sessionActivationTimeout :: NominalDiffTime

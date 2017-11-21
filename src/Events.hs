@@ -13,27 +13,16 @@ module Events
   , emailEventToEvent
   , decomposeEvent
   , ToEvent, toEvent
-  , EventT, runEventT, logEvents, logEvents_, getState
-  , mapEvents, liftToEvent
   , TimeStamped
   ) where
 
-import Control.Monad (void)
-import Control.Monad.Trans.Class (MonadTrans(..))
-import Control.Monad.Trans.Reader (ReaderT(..), ask, withReaderT)
 import Data.Aeson (ToJSON, toJSON, FromJSON, parseJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
 import Data.Aeson.TH (deriveJSON)
 import qualified Data.Aeson.Types as T
 import Data.DateTime (DateTime)
-import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Data.UUID (UUID)
-
-import Eventful (
-    ExpectedPosition, EventStoreReader(..), EventWriteError, StreamEvent,
-    getLatestStreamProjection, versionedStreamProjection,
-    streamProjectionState, EventVersion, Projection)
 
 import UnionSums (unionSumTypes, mkConverter, mkDecompose)
 
@@ -119,63 +108,5 @@ instance ToEvent Event where
 
 deriveJSON (aesonPrefix camelCase) ''RegistrationEmailType
 deriveJSON (aesonPrefix camelCase) ''Event
-
-
-type StoreEvents key event m =
-    key -> ExpectedPosition EventVersion -> [event]
-    -> m (Maybe (EventWriteError EventVersion))
-
-type EventT event m
-  = ReaderT
-  ( EventStoreReader UUID EventVersion m (StreamEvent UUID EventVersion event)
-  , StoreEvents UUID event m
-  ) m
-
-runEventT
-    :: (Monad m)
-    => EventT event m a
-    -> EventStoreReader UUID EventVersion m (StreamEvent UUID EventVersion event)
-    -> StoreEvents UUID event m -> m a
-runEventT et esr se = runReaderT et (esr, se)
-
-logEvents
-    :: (Monad m)
-    => UUID -> ExpectedPosition EventVersion -> [event]
-    -> EventT event m (Maybe (EventWriteError EventVersion))
-logEvents uuid pos events = ask >>= (\(_, se) -> lift $ se uuid pos events)
-
-logEvents_
-    :: (Monad m)
-    => UUID -> ExpectedPosition EventVersion -> [event]
-    -> EventT event m ()
-logEvents_ uuid pos = void . logEvents uuid pos
-
-getState
-    :: (Monad m)
-    => Projection state event -> UUID -> EventT event m state
-getState proj key = ask >>= (\(reader, _) -> lift $
-    streamProjectionState <$>
-    getLatestStreamProjection reader (versionedStreamProjection key proj))
-
-mapEvents
-    :: (Monad m) => (event -> event') -> (event' -> Maybe event)
-    -> EventT event m a
-    -> EventT event' m a
-mapEvents f f' et = withReaderT convert et
-  where
-    convert (reader, storeEvents) =
-      (overReader reader, \k p -> storeEvents k p . fmap f)
-    -- reader is a functor that internally deals in a list of events. We want to
-    -- be able to drop events from that list if they're not pertinent to
-    -- reconsituting our state, so we define the following:
-    overReader (EventStoreReader reader) =
-        EventStoreReader $ fmap (mapMaybe (sequence . fmap f')) <$> reader
-
-liftToEvent
-    :: (Monad m, ToEvent event)
-    => (Event -> Maybe event)
-    -> EventT event m a
-    -> EventT Event m a
-liftToEvent f' = mapEvents toEvent f'
 
 type TimeStamped a = (DateTime, a)

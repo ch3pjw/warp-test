@@ -49,8 +49,9 @@ import Eventful (
 
 import Events (
   EmailAddress, RegistrationEmailType(..), EmailEvent(..), UuidFor(..),
-  Event(..), decomposeEvent, TimeStamped,
-  EventT, logEvents_, getState, mapEvents, toEvent)
+  Event(..), decomposeEvent, TimeStamped, toEvent)
+import EventT (
+  EventT, logEvents_, getState, mapEvents)
 
 import Store (Store, sRunEventT)
 
