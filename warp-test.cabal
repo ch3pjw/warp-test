@@ -37,6 +37,7 @@ library
                      , blazeT
                      , bytestring
                      , clay
+                     , contravariant
                      , cryptohash
                      , datetime
                      , email-validate
@@ -47,6 +48,7 @@ library
                      , eventful-postgresql
                      , eventful-sql-common
                      , http-types
+                     , monad-control
                      , mime-mail
                      , mtl
                      , neat-interpolation
@@ -103,6 +105,7 @@ test-suite warp-test-test
   main-is:             Spec.hs
   build-depends:       base
                      , async
+                     , contravariant
                      , datetime
                      , errors
                      , eventful-core

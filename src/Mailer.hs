@@ -8,8 +8,9 @@ module Mailer
   ) where
 
 import Control.Exception (catch, SomeException)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.DateTime (getCurrentTime)
+import Data.Functor.Contravariant (contramap)
 import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Format (format)
@@ -19,21 +20,22 @@ import System.Envy (FromEnv, fromEnv, env, envMaybe)
 import qualified Network.HaskellNet.SMTP.SSL as SMTP
 import qualified Network.Mail.Mime as Mime
 
+import Eventful (ExpectedPosition(AnyPosition))
+
 import Events
   ( UuidFor, unUuidFor
   , RegistrationEmailType(..)
-  , Event
+  , Event, toEvent
   , EmailEvent(EmailSentEmailEvent)
-  , emailEventToEvent
-  , timeStamp
-  , logEvents
+  , mapEvents
+  , getState, logEvents'
   )
 import Store (Store)
 import Registration (
   EmailState(..), TimeStamped,
-  initialEmailProjection, liftProjection, liftEventT,
+  initialEmailProjection,
   condenseConsecutive, reactivelyRunEventTWithState,
-  unsafeEventToEmailEvent)
+  unsafeEventToEmailEvent, slightlySaferEventToEmailEvent)
 import Types (Password(..), EnvToggle(..))
 
 
@@ -133,16 +135,19 @@ generateEmail senderAddr verifyLF unsubLF uuid userState emailType =
 
 
 mailer
-  :: (UUID -> EmailState -> RegistrationEmailType -> Mime.Mail)
+  :: (MonadIO m)
+  => (UUID -> EmailState -> RegistrationEmailType -> Mime.Mail)
   -> SmtpSettings -> IO (Maybe (UuidFor (TimeStamped Event)))
-  -> Store (TimeStamped Event) -> IO ()
+  -> Store m (TimeStamped Event) -> m ()
 mailer genEmail settings = reactivelyRunEventTWithState
-    (liftProjection unsafeEventToEmailEvent initialEmailProjection)
+    (contramap unsafeEventToEmailEvent initialEmailProjection)
     getSendingEventT
   where
-    getSendingEventT uuid' state =
-      timeStamp getCurrentTime $ liftEventT emailEventToEvent $
-        (liftIO $ doSending uuid' state) >>= logEvents
+    getSendingEventT uuid' =
+        mapEvents (fmap toEvent) slightlySaferEventToEmailEvent $ do
+          t <- liftIO getCurrentTime
+          getState (unUuidFor uuid') >>= liftIO . doSending uuid' >>=
+            logEvents' (unUuidFor uuid') AnyPosition . fmap ((,) t)
     doSending uuid' state =
       let
         pending = condenseConsecutive $ esPendingEmails state

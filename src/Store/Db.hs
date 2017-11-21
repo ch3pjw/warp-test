@@ -5,10 +5,13 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Store.Db where
 
-import Control.Monad (void)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Trans.Control (MonadBaseControl)
+import Control.Monad.Trans.Reader (ReaderT)
 import Data.Aeson (ToJSON, FromJSON)
 import Data.Pool (Pool)
 import Data.UUID (UUID)
@@ -20,12 +23,6 @@ import Eventful
   , EventVersion
   , serializedEventStoreWriter
   , serializedVersionedEventStoreReader
-  , getLatestStreamProjection
-  , versionedStreamProjection
-  , storeEvents
-  )
-import Eventful.Store.Memory
-  ( ExpectedPosition(AnyPosition)
   )
 import Eventful.Store.Sql
   ( SqlEventStoreConfig(..)
@@ -37,8 +34,12 @@ import Eventful.Store.Postgresql
   ( postgresqlEventStoreWriter
   )
 
-import Events (unUuidFor)
-import Store.Types (Store, newStoreFrom)
+import Store.Types
+  (Store
+  , newStoreFrom
+  , liftEventStoreReader
+  , liftEventStoreWriter
+  )
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateSE2"] [persistLowerCase|
@@ -67,19 +68,18 @@ eventStoreConfig =
   SqlEvent2Event
 
 newDBStore
-  :: (ToJSON event, FromJSON event)
-  => Pool DB.SqlBackend -> IO (Store event)
+  :: (MonadIO m, MonadBaseControl IO m, ToJSON event, FromJSON event)
+  => Pool DB.SqlBackend -> IO (Store m event)
 newDBStore pool =
   let
-    writer = serializedEventStoreWriter jsonStringSerializer $
+    run :: (MonadBaseControl IO m) => ReaderT DB.SqlBackend m a -> m a
+    run = flip DB.runSqlPool pool
+    writer = liftEventStoreWriter run $
+        serializedEventStoreWriter jsonStringSerializer $
         postgresqlEventStoreWriter eventStoreConfig
-    reader = serializedVersionedEventStoreReader jsonStringSerializer $
+    reader = liftEventStoreReader run $
+        serializedVersionedEventStoreReader jsonStringSerializer $
         sqlEventStoreReader eventStoreConfig
   in do
     DB.runSqlPool (DB.runMigration migrateSE2) pool
-    newStoreFrom
-      (\uuid' events -> void $
-          DB.runSqlPool (storeEvents writer (unUuidFor uuid') AnyPosition events) pool)
-      (\initialProjection uuid' -> DB.runSqlPool
-          (getLatestStreamProjection reader $
-              versionedStreamProjection (unUuidFor uuid') initialProjection) pool)
+    newStoreFrom writer reader

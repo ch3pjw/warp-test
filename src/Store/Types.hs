@@ -3,30 +3,32 @@
 module Store.Types where
 
 import qualified Control.Concurrent.Chan.Unagi as U
-import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Trans.Writer (runWriterT)
 import Data.UUID (UUID)
 import Eventful (
-    Projection, StreamProjection, EventVersion, streamProjectionState)
+    Projection, EventVersion,
+    EventStoreReader(..), EventStoreWriter(..), EventWriteError,
+    storeAndPublishEvents)
+import Eventful.Store.Class (StreamEvent)
 
-import Events (EventT, UuidFor)
+import Events (EventT, runEventT)
 
-data Store event = Store
-  { sGetNotificationChan :: IO (U.OutChan (Maybe (UuidFor event)))
+data Store m event = Store
+  { sGetNotificationChan :: IO (U.OutChan (Maybe UUID))
   -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
   -- actually writing to the store...
   , sSendShutdown :: IO ()
-  , sRunEventT :: forall m a. (MonadIO m) => EventT event m a -> UuidFor event -> m a
-  , sRunEventTWithState :: forall state m a. (MonadIO m) => Projection state event -> (state -> EventT event m a) -> UuidFor event -> m a
+  , sRunEventT
+      :: forall state a. (MonadIO m)
+      => Projection state event -> EventT event state m a -> m a
   }
 
 newStoreFrom
-  :: (UuidFor event -> [event] -> IO ())
-  -> (forall state. Projection state event -> UuidFor event
-       -> IO (StreamProjection UUID EventVersion state event))
-  -> IO (Store event)
-newStoreFrom write getLatestProjection = do
+  :: (MonadIO m)
+  => EventStoreWriter UUID EventVersion m event
+  -> EventStoreReader UUID EventVersion m (StreamEvent UUID EventVersion event)
+  -> IO (Store m event)
+newStoreFrom writer reader = do
     -- We assume that the unused OutChan gets cleaned up when it goes out of
     -- scope:
     (i, _) <- U.newChan
@@ -34,15 +36,20 @@ newStoreFrom write getLatestProjection = do
         (U.dupChan i)
         (U.writeChan i Nothing)
         (_runEventT i)
-        (_runEventTWithState i)
   where
-    getLatestState initialProjection uuid' =
-        streamProjectionState <$> getLatestProjection initialProjection uuid'
-    _runEventT i eventT uuid' = do
-        (result, events) <- runWriterT eventT
-        liftIO $ write uuid' events
-        when (not . null $ events) $ liftIO $ U.writeChan i (Just uuid')
-        return result
-    _runEventTWithState i initialProjection f uuid' = do
-        state <- liftIO $ getLatestState initialProjection uuid'
-        _runEventT i (f state) uuid'
+    _runEventT i projection elt = do
+        runEventT elt projection reader $ storeAndPublishEvents
+          writer [\uuid event -> liftIO $ U.writeChan i $ Just uuid]
+
+liftEventStoreWriter
+  :: (m (Maybe (EventWriteError pos)) -> n (Maybe (EventWriteError pos)))
+  -> EventStoreWriter key pos m event
+  -> EventStoreWriter key pos n event
+liftEventStoreWriter f (EventStoreWriter w) =
+    EventStoreWriter $ \k p es -> f $ w k p es
+
+liftEventStoreReader
+  :: (m [event] -> n [event])
+  -> EventStoreReader key pos m event
+  -> EventStoreReader key pos n event
+liftEventStoreReader f (EventStoreReader r) = EventStoreReader $ f . r
