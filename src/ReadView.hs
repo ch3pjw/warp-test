@@ -8,12 +8,12 @@
 
 module ReadView
   ( DB.EntityField(..)
-  , EmailRegistrationId
-  , emailRegistrationEmailAddress
   , ViewSequenceNumberId
+  , ReadView(..)
+  , simpleReadView
   , viewWorker
   , runWorkers
-  , userStateReadView
+  , liftReadView
   ) where
 
 import qualified Control.Concurrent.Async as A
@@ -38,15 +38,7 @@ import Eventful.Store.Sql (
     jsonStringSerializer,
     sqlGlobalEventStoreReader)
 
-import Events
-  ( EmailAddress
-  , Event( EmailAddressSubmittedEvent
-         , EmailAddressVerifiedEvent
-         , EmailAddressRemovedEvent
-         )
-  )
-import Registration (TimeStamped, untilNothing)
-import Store (eventStoreConfig)
+import Store (eventStoreConfig, untilNothing)
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateVSN"] [persistLowerCase|
@@ -151,26 +143,8 @@ runWorkers rvs pool getWait = do
   where
     runViewWorker rv = A.async $ getWait >>= viewWorker rv pool
 
-
-share [mkPersist sqlSettings, mkMigrate "migrateER"] [persistLowerCase|
-EmailRegistration
-    uuid UUID
-    emailAddress EmailAddress
-    verified Bool
-    UniqueEmailAddress emailAddress
-    UniqueUuid uuid
-    deriving Show
-|]
-
--- FIXME: table name needs to line up with what the template stuff above
--- produces, and is _not_ checked :-/
-userStateReadView :: ReadView (TimeStamped Event)
-userStateReadView = simpleReadView  "email_registration" migrateER update
+liftReadView :: (event' -> Maybe event) -> ReadView event -> ReadView event'
+liftReadView f rv = rv { rvUpdate = rvUpdate' }
   where
-    update uuid (_, EmailAddressSubmittedEvent email) = void $ DB.insertBy $
-        EmailRegistration uuid email False
-    update uuid (_, EmailAddressVerifiedEvent) = DB.updateWhere
-        [EmailRegistrationUuid ==. uuid]
-        [EmailRegistrationVerified =. True]
-    update uuid (_, EmailAddressRemovedEvent) = DB.deleteBy $ UniqueUuid uuid
-    update _ _ = return ()
+    rvUpdate' sn uuid version event' =
+      maybe (return ()) (rvUpdate rv sn uuid version) (f event')

@@ -1,26 +1,27 @@
 {-# LANGUAGE Rank2Types #-}
 
-module Store.Types where
+module Store.Types
+  ( Store(..), newStoreFrom, liftEventStoreWriter, liftEventStoreReader
+  , untilNothing, reactivelyRunEventT
+  ) where
 
 import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.UUID (UUID)
 import Eventful (
-    Projection, EventVersion,
+    EventVersion,
     EventStoreReader(..), EventStoreWriter(..), EventWriteError,
     storeAndPublishEvents)
 import Eventful.Store.Class (StreamEvent)
 
-import Events (EventT, runEventT)
+import EventT (EventT, runEventT)
 
 data Store m event = Store
   { sGetNotificationChan :: IO (U.OutChan (Maybe UUID))
   -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
   -- actually writing to the store...
   , sSendShutdown :: IO ()
-  , sRunEventT
-      :: forall state a. (MonadIO m)
-      => Projection state event -> EventT event state m a -> m a
+  , sRunEventT :: forall a. (MonadIO m) => EventT event m a -> m a
   }
 
 newStoreFrom
@@ -37,8 +38,8 @@ newStoreFrom writer reader = do
         (U.writeChan i Nothing)
         (_runEventT i)
   where
-    _runEventT i projection elt = do
-        runEventT elt projection reader $ storeAndPublishEvents
+    _runEventT i elt = do
+        runEventT elt reader $ storeAndPublishEvents
           writer [\uuid event -> liftIO $ U.writeChan i $ Just uuid]
 
 liftEventStoreWriter
@@ -53,3 +54,16 @@ liftEventStoreReader
   -> EventStoreReader key pos m event
   -> EventStoreReader key pos n event
 liftEventStoreReader f (EventStoreReader r) = EventStoreReader $ f . r
+
+
+untilNothing :: (MonadIO m) => IO (Maybe a) -> (a -> m ()) -> m ()
+untilNothing wait f =
+    liftIO wait >>=
+    maybe (return ()) (\a -> f a >> untilNothing wait f)
+
+reactivelyRunEventT
+  :: (MonadIO m)
+  => (x -> EventT event m ())
+  -> IO (Maybe x) -> Store m event -> m ()
+reactivelyRunEventT f waitX store =
+    untilNothing waitX $ \x -> sRunEventT store (f x)

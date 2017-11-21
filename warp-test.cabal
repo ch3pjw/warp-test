@@ -18,12 +18,18 @@ library
   ghc-options:         -Wall
   exposed-modules:     Css
                      , Events
+                     , EventT
                      , Lib
                      , Mailer
                      , Middleware
                      , ReadView
                      , Registration
+                     , Registration.Model
+                     , Registration.ReadViews
                      , Router
+                     , Sessions
+                     , Sessions.Model
+                     , Sessions.ReadViews
                      , Store
                      , Store.Types
                      , Store.Db
@@ -37,7 +43,6 @@ library
                      , blazeT
                      , bytestring
                      , clay
-                     , contravariant
                      , cryptohash
                      , datetime
                      , email-validate
@@ -105,7 +110,6 @@ test-suite warp-test-test
   main-is:             Spec.hs
   build-depends:       base
                      , async
-                     , contravariant
                      , datetime
                      , errors
                      , eventful-core

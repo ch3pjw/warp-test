@@ -80,7 +80,7 @@ main = do
 
     let getWait = U.readChan <$> sGetNotificationChan store
 
-    withAsync (runWorkers [userStateReadView] pool getWait) $ \viewWorkerAsync -> do
+    withAsync (runWorkers [emailStateReadView] pool getWait) $ \viewWorkerAsync -> do
         link viewWorkerAsync
         withAsync (mailer genEmail smtpSettings (fmap UuidFor <$> U.readChan o) store) $ \mailerAsync -> do
             link mailerAsync

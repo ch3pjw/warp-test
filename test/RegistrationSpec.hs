@@ -15,7 +15,6 @@ import Control.Monad
 import Control.Monad.IO.Class (liftIO)
 import Data.DateTime (DateTime)
 import qualified Data.DateTime as DateTime
-import Data.Functor.Contravariant (contramap)
 import Data.Time.Clock (addUTCTime)
 import Data.UUID (UUID)
 import qualified System.Timeout as Timeout
@@ -28,12 +27,16 @@ import Events
   , RegistrationEmailType(..)
   , EmailEvent(..)
   , Event, toEvent
-  , EventT, mapEvents
-  , getState, logEvents
   , TimeStamped
   )
+import EventT
+  ( EventT, mapEvents
+  , getState, logEvents
+  )
 import Registration
-import Store (newInMemoryStore, sSendShutdown, sGetNotificationChan, Store)
+import Store
+  ( newInMemoryStore, sSendShutdown, sGetNotificationChan, Store
+  , untilNothing, reactivelyRunEventT)
 
 
 spec :: Spec
@@ -215,8 +218,7 @@ testContext spec = do
     o <- sGetNotificationChan store
     (ei, eo) <- U.newChan
     let actor = newEmailActor "NaCl" (clockGetTime clock) store
-    a <- async $ reactivelyRunEventTWithState
-        (contramap unsafeEventToEmailEvent initialEmailProjection)
+    a <- async $ reactivelyRunEventT
         (\u -> liftToEvent $ mockSendEmails (aGetTime actor) ei u)
         (U.readChan o)
         store
@@ -259,9 +261,9 @@ checkInbox eo ea et =
 
 mockSendEmails
   :: IO DateTime -> U.InChan Email -> UUID
-  -> EventT (TimeStamped EmailEvent) EmailState IO ()
+  -> EventT (TimeStamped EmailEvent) IO ()
 mockSendEmails getT i uuid = do
-    s <- getState uuid
+    s <- getState initialEmailProjection uuid
     mapM_ (sendEmail s) $ condenseConsecutive $ esPendingEmails s
   where
     sendEmail s emailType = do
