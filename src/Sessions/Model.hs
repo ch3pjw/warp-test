@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Session where
+module Sessions.Model where
 
 import Control.Monad (when, void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
