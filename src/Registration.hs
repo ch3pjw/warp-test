@@ -31,7 +31,6 @@ import Data.Aeson.TH (deriveJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
 import qualified Data.ByteString as BS
 import Data.DateTime (DateTime)
-import Data.Functor.Contravariant (contramap)
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text

@@ -39,7 +39,6 @@ library
                      , blazeT
                      , bytestring
                      , clay
-                     , contravariant
                      , cryptohash
                      , datetime
                      , email-validate
@@ -107,7 +106,6 @@ test-suite warp-test-test
   main-is:             Spec.hs
   build-depends:       base
                      , async
-                     , contravariant
                      , datetime
                      , errors
                      , eventful-core

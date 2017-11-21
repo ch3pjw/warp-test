@@ -15,7 +15,6 @@ import Control.Monad
 import Control.Monad.IO.Class (liftIO)
 import Data.DateTime (DateTime)
 import qualified Data.DateTime as DateTime
-import Data.Functor.Contravariant (contramap)
 import Data.Time.Clock (addUTCTime)
 import Data.UUID (UUID)
 import qualified System.Timeout as Timeout
