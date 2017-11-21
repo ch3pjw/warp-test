@@ -12,7 +12,7 @@ module Events
   , emailEventToEvent
   , decomposeEvent
   , ToEvent, toEvent
-  , EventT, runEventT, logEvents, logEvents', getState
+  , EventT, runEventT, logEvents, logEvents_, getState
   , mapEvents, liftToEvent
   , TimeStamped
   ) where
@@ -139,11 +139,11 @@ logEvents
     -> EventT event state m (Maybe (EventWriteError EventVersion))
 logEvents uuid pos events = ask >>= (\(_, _, se) -> lift $ se uuid pos events)
 
-logEvents'
+logEvents_
     :: (Monad m)
     => UUID -> ExpectedPosition EventVersion -> [event]
     -> EventT event state m ()
-logEvents' uuid pos = void . logEvents uuid pos
+logEvents_ uuid pos = void . logEvents uuid pos
 
 getState
     :: (Monad m)

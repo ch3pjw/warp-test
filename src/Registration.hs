@@ -51,7 +51,7 @@ import Eventful (
 import Events (
   EmailAddress, RegistrationEmailType(..), EmailEvent(..), UuidFor(..),
   Event(..), decomposeEvent, TimeStamped,
-  EventT, logEvents', getState, mapEvents, toEvent)
+  EventT, logEvents_, getState, mapEvents, toEvent)
 
 import Store (Store, sRunEventT)
 
@@ -146,7 +146,7 @@ newEmailActor salt getT store = EmailActor
     submitEmail :: (MonadIO m) => EmailAddress -> EmailAction m ()
     submitEmail e = do
         t <- liftIO getT
-        logEvents' (unUuidFor $ hashEmail salt e) AnyPosition
+        logEvents_ (unUuidFor $ hashEmail salt e) AnyPosition
             [(t, EmailAddressSubmittedEmailEvent e)]
     verifyEmail
         :: (MonadIO m)
@@ -157,7 +157,7 @@ newEmailActor salt getT store = EmailActor
         emailState <- getState uuid
         if withinValidationPeriod t emailState
           then
-            logEvents' uuid AnyPosition [(t, EmailAddressVerifiedEmailEvent)]
+            logEvents_ uuid AnyPosition [(t, EmailAddressVerifiedEmailEvent)]
             >> return Verified
           else
             return $ esVerificationState emailState
@@ -167,7 +167,7 @@ newEmailActor salt getT store = EmailActor
         t <- liftIO getT
         emailState <- getState uuid
         when (not . Text.null $ esEmailAddress emailState) $
-          logEvents' uuid AnyPosition [(t, EmailAddressRemovedEmailEvent)]
+          logEvents_ uuid AnyPosition [(t, EmailAddressRemovedEmailEvent)]
 
 unsafeEventToEmailEvent :: TimeStamped Event -> TimeStamped EmailEvent
 unsafeEventToEmailEvent = fmap $ decomposeEvent id (error "no!") (error "wrong!")

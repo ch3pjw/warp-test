@@ -28,7 +28,7 @@ import Events
   , Event, toEvent
   , EmailEvent(EmailSentEmailEvent)
   , mapEvents
-  , getState, logEvents'
+  , getState, logEvents_
   )
 import Store (Store)
 import Registration (
@@ -147,7 +147,7 @@ mailer genEmail settings = reactivelyRunEventTWithState
         mapEvents (fmap toEvent) slightlySaferEventToEmailEvent $ do
           t <- liftIO getCurrentTime
           getState (unUuidFor uuid') >>= liftIO . doSending uuid' >>=
-            logEvents' (unUuidFor uuid') AnyPosition . fmap ((,) t)
+            logEvents_ (unUuidFor uuid') AnyPosition . fmap ((,) t)
     doSending uuid' state =
       let
         pending = condenseConsecutive $ esPendingEmails state
