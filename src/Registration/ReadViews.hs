@@ -9,7 +9,7 @@
 module Registration.ReadViews
   ( DB.EntityField(..)
   , emailRegistrationEmailAddress
-  , userStateReadView
+  , emailStateReadView
   ) where
 
 import Control.Monad (void)
@@ -41,8 +41,8 @@ EmailRegistration
 
 -- FIXME: table name needs to line up with what the template stuff above
 -- produces, and is _not_ checked :-/
-userStateReadView :: ReadView (TimeStamped Event)
-userStateReadView = simpleReadView  "email_registration" migrateER update
+emailStateReadView :: ReadView (TimeStamped Event)
+emailStateReadView = simpleReadView  "email_registration" migrateER update
   where
     update uuid (_, EmailAddressSubmittedEvent email) = void $ DB.insertBy $
         EmailRegistration uuid email False
