@@ -7,6 +7,7 @@ module Events
   , RegistrationEmailType(..)
   , EmailEvent(..)
   , AccountEvent(..)
+  , UserAgentString(..)
   , SessionEvent(..)
   , Event(..)
   , emailEventToEvent
@@ -57,19 +58,21 @@ data RegistrationEmailType
 
 data EmailEvent
   -- User-generated events:
+  -- FIXME: dang it, I thought I changed this to "added" rather than
+  --  "submitted" :-( When we next migrate the event log, let's change the name
+  -- to that because it's better!
   = EmailAddressSubmittedEmailEvent EmailAddress
   | EmailAddressVerifiedEmailEvent
   | EmailAddressRemovedEmailEvent
+  | EmailAddressAssociatedWithAccountEmailEvent (UuidFor AccountEvent)
   -- System-generated event:
   | EmailSentEmailEvent RegistrationEmailType
+  | AssociationEmailSentEmailEvent
   deriving (Eq, Show)
 
 data AccountEvent
-  = AccountNameUpdatedAccountEvent Text
-  | AccountAddedEmailAddressAccountEvent UUID
-  | AccountRemovedEmailAddressAccountEvent UUID
-  | AccountAddedSessionAccountEvent UUID
-  | AccountRemovedSessionAccountEvent UUID
+  = AccountCreatedAccountEvent
+  | AccountNameUpdatedAccountEvent Text
   deriving (Eq, Show)
 
 newtype UserAgentString =
@@ -82,7 +85,10 @@ instance FromJSON UserAgentString where
     parseJSON = T.withText "UserAgentString" $ pure . UserAgentString
 
 data SessionEvent
-  = SessionSignedInSessionEvent UserAgentString
+  = SessionRequestedSessionEvent EmailAddress
+  | SessionAssociatedWithAccountSessionEvent (UuidFor AccountEvent)
+  | SessionSignInEmailSentSessionEvent
+  | SessionSignedInSessionEvent UserAgentString
   | SessionSignedOutSessionEvent
   deriving (Eq, Show)
 

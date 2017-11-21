@@ -24,6 +24,7 @@ library
                      , ReadView
                      , Registration
                      , Router
+                     , Session
                      , Store
                      , Store.Types
                      , Store.Db
