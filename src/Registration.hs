@@ -12,7 +12,7 @@ module Registration
     initialEmailState
   , EmailActor , newEmailActor
   , aPoll, aSubmitEmailAddress, aVerify, aUnsubscribe, aGetTime
-  , reactivelyRunEventTWithState
+  , reactivelyRunEventT
   , getDatabaseConfig
   , untilNothing
   , RegistrationConfig, rcDatabaseConfig, rcUuidSalt
@@ -187,11 +187,11 @@ untilNothing wait f =
     liftIO wait >>=
     maybe (return ()) (\a -> f a >> untilNothing wait f)
 
-reactivelyRunEventTWithState
+reactivelyRunEventT
   :: (MonadIO m)
   => (x -> EventT event m ())
   -> IO (Maybe x) -> Store m event -> m ()
-reactivelyRunEventTWithState f waitX store = do
+reactivelyRunEventT f waitX store = do
     untilNothing waitX $ \x -> sRunEventT store (f x)
 
 

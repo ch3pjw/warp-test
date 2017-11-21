@@ -33,7 +33,7 @@ import Store (Store)
 import Registration (
   EmailState(..), TimeStamped,
   initialEmailProjection,
-  condenseConsecutive, reactivelyRunEventTWithState,
+  condenseConsecutive, reactivelyRunEventT,
   slightlySaferEventToEmailEvent)
 import Types (Password(..), EnvToggle(..))
 
@@ -138,7 +138,7 @@ mailer
   => (UUID -> EmailState -> RegistrationEmailType -> Mime.Mail)
   -> SmtpSettings -> IO (Maybe (UuidFor (TimeStamped Event)))
   -> Store m (TimeStamped Event) -> m ()
-mailer genEmail settings = reactivelyRunEventTWithState getSendingEventT
+mailer genEmail settings = reactivelyRunEventT getSendingEventT
   where
     getSendingEventT uuid' =
         mapEvents (fmap toEvent) slightlySaferEventToEmailEvent $ do

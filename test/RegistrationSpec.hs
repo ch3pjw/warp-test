@@ -215,7 +215,7 @@ testContext spec = do
     o <- sGetNotificationChan store
     (ei, eo) <- U.newChan
     let actor = newEmailActor "NaCl" (clockGetTime clock) store
-    a <- async $ reactivelyRunEventTWithState
+    a <- async $ reactivelyRunEventT
         (\u -> liftToEvent $ mockSendEmails (aGetTime actor) ei u)
         (U.readChan o)
         store
