@@ -10,7 +10,7 @@ module ReadView
   ( DB.EntityField(..)
   , ViewSequenceNumberId
   , ReadView(..)
-  , simpleReadView
+  , readView, simpleReadView
   , viewWorker
   , runWorkers
   , liftReadView
@@ -49,15 +49,21 @@ ViewSequenceNumber
     deriving Show
 |]
 
+type RvUpdate event
+    = SequenceNumber -> UUID -> EventVersion -> event
+    -> ReaderT DB.SqlBackend IO ()
+
 data ReadView event = ReadView
   { rvTableName :: Text
   , rvMigration :: DB.Migration
-  , rvUpdate :: SequenceNumber -> UUID -> EventVersion -> event -> ReaderT DB.SqlBackend IO ()
+  , rvUpdate :: RvUpdate event
   }
 
 instance Show (ReadView event) where
     show rv = unpack $ "<ReadView " <> (rvTableName rv) <> ">"
 
+readView :: Text -> DB.Migration -> RvUpdate event -> ReadView event
+readView = ReadView
 
 -- | A simple read view doesn't give you access to event version information
 --   from the event log, just events and the keys of the events streams for
@@ -66,7 +72,7 @@ simpleReadView
   :: Text -> DB.Migration -> (UUID -> event -> ReaderT DB.SqlBackend IO ())
   -> ReadView event
 simpleReadView tableName migration update =
-    ReadView tableName migration update'
+    readView tableName migration update'
   where
     update' _ uuid _ event = update uuid event
 
