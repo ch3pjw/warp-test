@@ -19,7 +19,7 @@ import Eventful.Store.Postgresql () -- For UUID postgresification
 
 import Events
   ( EmailAddress, UserAgentString(..), Event, SessionEvent(..), AccountEvent
-  , EmailEvent, TimeStamped, decomposeEvent, UuidFor(..))
+  , EmailEvent, TimeStamped, decomposeEvent, UuidFor)
 import ReadView (ReadView, simpleReadView, liftReadView)
 
 
@@ -33,26 +33,21 @@ ActiveSession
     deriving Show
 |]
 
--- FIXME: could make the DB model here directly refer to (UuidFor SessionEvent)
--- and (UuidFor AccountEvent), rather than just UUID.
-
 _activeSessionsReadView :: ReadView SessionEvent
 _activeSessionsReadView = simpleReadView  "active_sessions" migrateAS update
   where
-    update uuid (SessionRequestedSessionEvent e) =
-        -- FIXME: UUIDs should already be wrapped here, because we've narrowed
-        -- our scope down to just SessionEvents:
-        void $ DB.insertBy $ ActiveSession (UuidFor uuid) Nothing Nothing e
-    update sUuid (SessionAssociatedWithAccountSessionEvent aUuid') =
+    update uuid' (SessionRequestedSessionEvent e) =
+        void $ DB.insertBy $ ActiveSession uuid' Nothing Nothing e
+    update sUuid' (SessionAssociatedWithAccountSessionEvent aUuid') =
         DB.updateWhere
-          [ActiveSessionSessionUuid ==. UuidFor sUuid]
+          [ActiveSessionSessionUuid ==. sUuid']
           [ActiveSessionAccountUuid =. Just aUuid']
-    update uuid (SessionSignedInSessionEvent uaString) =
+    update uuid' (SessionSignedInSessionEvent uaString) =
         DB.updateWhere
-          [ActiveSessionSessionUuid ==. UuidFor uuid]
+          [ActiveSessionSessionUuid ==. uuid']
           [ActiveSessionUserAgent =. Just (unUserAgentString uaString)]
-    update uuid SessionSignedOutSessionEvent =
-        DB.deleteBy $ UniqueSessionUuid $ UuidFor uuid
+    update uuid' SessionSignedOutSessionEvent =
+        DB.deleteBy $ UniqueSessionUuid uuid'
     update _ SessionSignInEmailSentSessionEvent = return ()
 
 activeSessionReadView :: ReadView (TimeStamped Event)

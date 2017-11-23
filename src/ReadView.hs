@@ -24,7 +24,6 @@ import Data.Aeson (ToJSON, FromJSON)
 import Data.Monoid
 import Data.Pool (Pool)
 import Data.Text (Text, unpack)
-import Data.UUID (UUID)
 import Database.Persist.Postgresql ((=.), (==.))
 import qualified Database.Persist.Postgresql as DB
 import Database.Persist.TH (
@@ -38,6 +37,7 @@ import Eventful.Store.Sql (
     jsonStringSerializer,
     sqlGlobalEventStoreReader)
 
+import Events (UuidFor(..), coerceUuidFor)
 import Store (eventStoreConfig, untilNothing)
 
 
@@ -50,7 +50,7 @@ ViewSequenceNumber
 |]
 
 type RvUpdate event
-    = SequenceNumber -> UUID -> EventVersion -> event
+    = SequenceNumber -> UuidFor event -> EventVersion -> event
     -> ReaderT DB.SqlBackend IO ()
 
 data ReadView event = ReadView
@@ -69,7 +69,8 @@ readView = ReadView
 --   from the event log, just events and the keys of the events streams for
 --   those events.
 simpleReadView
-  :: Text -> DB.Migration -> (UUID -> event -> ReaderT DB.SqlBackend IO ())
+  :: Text -> DB.Migration
+  -> (UuidFor event -> event -> ReaderT DB.SqlBackend IO ())
   -> ReadView event
 simpleReadView tableName migration update =
     readView tableName migration update'
@@ -96,7 +97,7 @@ handleReadViewEvents rv events = do
   where
     decomposeEvent e = let e' = streamEventEvent e in
         ( streamEventPosition e
-        , streamEventKey e'
+        , UuidFor $ streamEventKey e'
         , streamEventPosition e'
         , streamEventEvent e')
     applyUpdate (globalPos, streamKey, streamPos, streamEventData) =
@@ -163,4 +164,4 @@ liftReadView :: (event' -> Maybe event) -> ReadView event -> ReadView event'
 liftReadView f rv = rv { rvUpdate = rvUpdate' }
   where
     rvUpdate' sn uuid version event' =
-      maybe (return ()) (rvUpdate rv sn uuid version) (f event')
+      maybe (return ()) (rvUpdate rv sn (coerceUuidFor uuid) version) (f event')

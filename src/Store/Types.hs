@@ -14,10 +14,11 @@ import Eventful (
     storeAndPublishEvents)
 import Eventful.Store.Class (StreamEvent)
 
+import Events (UuidFor(..))
 import EventT (EventT, runEventT)
 
 data Store m event = Store
-  { sGetWaitUpdate :: IO (IO (Maybe UUID))
+  { sGetWaitUpdate :: IO (IO (Maybe (UuidFor event)))
   -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
   -- actually writing to the store...
   , sSendShutdown :: IO ()
@@ -40,7 +41,7 @@ newStoreFrom writer reader = do
   where
     _runEventT i elt = do
         runEventT elt reader $ storeAndPublishEvents
-          writer [\uuid _event -> liftIO $ U.writeChan i $ Just uuid]
+          writer [\uuid _event -> liftIO $ U.writeChan i $ Just $ UuidFor uuid]
 
 liftEventStoreWriter
   :: (m (Maybe (EventWriteError pos)) -> n (Maybe (EventWriteError pos)))

@@ -25,7 +25,6 @@ import Registration
 import ReadView (runReadViews)
 import Store (newDBStore, sGetWaitUpdate)
 import Types (Password(..), EnvToggle(..))
-import Events (UuidFor(..))
 import Mailer
 import Lib
 import Router
@@ -83,7 +82,7 @@ main = do
 
     withAsync (runReadViews [(U.writeChan esUpdateIn, emailStateReadView)] pool getWait) $ \viewWorkerAsync -> do
         link viewWorkerAsync
-        withAsync (mailer genEmail smtpSettings (fmap UuidFor <$> waitStoreUpdate) store) $ \mailerAsync -> do
+        withAsync (mailer genEmail smtpSettings waitStoreUpdate store) $ \mailerAsync -> do
             link mailerAsync
             if (scAllowInsecure serverConfig)
             then Warp.run (scPort serverConfig) app

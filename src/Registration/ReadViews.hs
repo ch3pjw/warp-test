@@ -26,6 +26,7 @@ import Events
          , EmailAddressRemovedEvent
          )
   , TimeStamped
+  , unUuidFor
   )
 import ReadView (ReadView, simpleReadView)
 
@@ -44,10 +45,11 @@ EmailRegistration
 emailStateReadView :: ReadView (TimeStamped Event)
 emailStateReadView = simpleReadView  "email_registration" migrateER update
   where
-    update uuid (_, EmailAddressSubmittedEvent email) = void $ DB.insertBy $
-        EmailRegistration uuid email False
-    update uuid (_, EmailAddressVerifiedEvent) = DB.updateWhere
-        [EmailRegistrationUuid ==. uuid]
+    update uuid' (_, EmailAddressSubmittedEvent email) = void $ DB.insertBy $
+        EmailRegistration (unUuidFor uuid') email False
+    update uuid' (_, EmailAddressVerifiedEvent) = DB.updateWhere
+        [EmailRegistrationUuid ==. unUuidFor uuid']
         [EmailRegistrationVerified =. True]
-    update uuid (_, EmailAddressRemovedEvent) = DB.deleteBy $ UniqueUuid uuid
+    update uuid' (_, EmailAddressRemovedEvent) =
+        DB.deleteBy $ UniqueUuid $ unUuidFor uuid'
     update _ _ = return ()
