@@ -59,6 +59,7 @@ library
                      , neat-interpolation
                      , network-uri
                      , HaskellNet-SSL
+                     , persistent
                      , persistent-database-url
                      , persistent-postgresql
                      , persistent-template
