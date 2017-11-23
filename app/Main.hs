@@ -22,7 +22,7 @@ import Network.Wai.Middleware.HttpAuth (basicAuth)
 import System.Envy (FromEnv, fromEnv, env, envMaybe, decodeEnv)
 
 import Registration
-import ReadView
+import ReadView (runReadViews)
 import Store (newDBStore, sGetWaitUpdate)
 import Types (Password(..), EnvToggle(..))
 import Events (UuidFor(..))
@@ -79,8 +79,9 @@ main = do
           (formatULink $ scDomain serverConfig)
 
     let getWait = sGetWaitUpdate store
+    (esUpdateIn, esUpdateOut) <- U.newChan
 
-    withAsync (runWorkers [emailStateReadView] pool getWait) $ \viewWorkerAsync -> do
+    withAsync (runReadViews [(U.writeChan esUpdateIn, emailStateReadView)] pool getWait) $ \viewWorkerAsync -> do
         link viewWorkerAsync
         withAsync (mailer genEmail smtpSettings (fmap UuidFor <$> waitStoreUpdate) store) $ \mailerAsync -> do
             link mailerAsync

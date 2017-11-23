@@ -12,7 +12,7 @@ module ReadView
   , ReadView(..)
   , readView, simpleReadView
   , viewWorker
-  , runWorkers
+  , runReadViews
   , liftReadView
   ) where
 
@@ -131,23 +131,33 @@ updateReadView rv =
 
 viewWorker
   :: (ToJSON event, FromJSON event)
-  => ReadView event -> Pool DB.SqlBackend -> (IO (Maybe a)) -> IO ()
-viewWorker rv pool wait = DB.runSqlPool i pool >> f
+  => ReadView event
+  -> Pool DB.SqlBackend
+  -> (Maybe () -> IO ())
+  -> (IO (Maybe a))
+  -> IO ()
+viewWorker rv pool notify wait = DB.runSqlPool i pool >> f >> notify Nothing
   where
-    f = untilNothing wait (const $ DB.runSqlPool (updateReadView rv) pool)
-    i = initialiseReadView rv >> updateReadView rv
+    f = untilNothing wait (const $ DB.runSqlPool updateAndNotify pool)
+    i = initialiseReadView rv >> updateAndNotify
+    updateAndNotify = updateReadView rv >> liftIO (notify $ Just ())
 
 
-runWorkers
+runReadViews
   :: (ToJSON event, FromJSON event)
-  => [ReadView event] -> Pool DB.SqlBackend -> (IO (IO (Maybe a))) -> IO ()
-runWorkers rvs pool getWait = do
+  => [(Maybe () -> IO (), ReadView event)]
+  -> Pool DB.SqlBackend -> (IO (IO (Maybe a))) -> IO ()
+runReadViews notificationActionsAndRvs pool getWait = do
+    -- Taking the pairs of ReadView and corresponding notification channel feels
+    -- clunky - but the alternative, as we have in Store, where we construct a
+    -- queue internally in an IO action that returns the data structure doesn't
+    -- feel great either...
     DB.runSqlPool (DB.runMigration migrateVSN) pool
-    as <- mapM runViewWorker rvs
+    as <- mapM (uncurry runViewWorker) notificationActionsAndRvs
     mapM_ A.link as
     mapM_ A.wait as
   where
-    runViewWorker rv = A.async $ getWait >>= viewWorker rv pool
+    runViewWorker n rv = A.async $ getWait >>= viewWorker rv pool n
 
 liftReadView :: (event' -> Maybe event) -> ReadView event -> ReadView event'
 liftReadView f rv = rv { rvUpdate = rvUpdate' }
