@@ -35,7 +35,7 @@ import EventT
   )
 import Registration
 import Store
-  ( newInMemoryStore, sSendShutdown, sGetNotificationChan, Store
+  ( newInMemoryStore, sSendShutdown, sGetWaitUpdate, Store
   , untilNothing, reactivelyRunEventT)
 
 
@@ -215,12 +215,12 @@ testContext :: (TestContext -> IO ()) -> IO ()
 testContext spec = do
     clock <- newClock
     store <- newInMemoryStore :: IO (Store IO (TimeStamped Event))
-    o <- sGetNotificationChan store
+    waitUpdate <- sGetWaitUpdate store
     (ei, eo) <- U.newChan
     let actor = newEmailActor "NaCl" (clockGetTime clock) store
     a <- async $ reactivelyRunEventT
         (\u -> liftToEvent $ mockSendEmails (aGetTime actor) ei u)
-        (U.readChan o)
+        waitUpdate
         store
     link a
     bracket

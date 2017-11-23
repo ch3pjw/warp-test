@@ -23,7 +23,7 @@ import System.Envy (FromEnv, fromEnv, env, envMaybe, decodeEnv)
 
 import Registration
 import ReadView
-import Store (newDBStore, sGetNotificationChan)
+import Store (newDBStore, sGetWaitUpdate)
 import Types (Password(..), EnvToggle(..))
 import Events (UuidFor(..))
 import Mailer
@@ -63,7 +63,7 @@ main = do
     -- Do a bunch of initialisation:
     pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr $ rcDatabaseConfig regConfig) 2)
     store <- newDBStore pool
-    o <- sGetNotificationChan store
+    waitStoreUpdate <- sGetWaitUpdate store
     let actor = newEmailActor (rcUuidSalt regConfig) getCurrentTime store
 
     let authMiddleware = buildAuth
@@ -78,11 +78,11 @@ main = do
           (formatVLink $ scDomain serverConfig)
           (formatULink $ scDomain serverConfig)
 
-    let getWait = U.readChan <$> sGetNotificationChan store
+    let getWait = sGetWaitUpdate store
 
     withAsync (runWorkers [emailStateReadView] pool getWait) $ \viewWorkerAsync -> do
         link viewWorkerAsync
-        withAsync (mailer genEmail smtpSettings (fmap UuidFor <$> U.readChan o) store) $ \mailerAsync -> do
+        withAsync (mailer genEmail smtpSettings (fmap UuidFor <$> waitStoreUpdate) store) $ \mailerAsync -> do
             link mailerAsync
             if (scAllowInsecure serverConfig)
             then Warp.run (scPort serverConfig) app
