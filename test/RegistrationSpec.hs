@@ -35,7 +35,7 @@ import EventT
   )
 import Registration
 import Store
-  ( newInMemoryStore, sSendShutdown, sGetNotificationChan, Store
+  ( newInMemoryStore, sSendShutdown, sGetWaitUpdate, Store
   , untilNothing, reactivelyRunEventT)
 
 
@@ -215,12 +215,12 @@ testContext :: (TestContext -> IO ()) -> IO ()
 testContext spec = do
     clock <- newClock
     store <- newInMemoryStore :: IO (Store IO (TimeStamped Event))
-    o <- sGetNotificationChan store
+    waitUpdate <- sGetWaitUpdate store
     (ei, eo) <- U.newChan
     let actor = newEmailActor "NaCl" (clockGetTime clock) store
     a <- async $ reactivelyRunEventT
         (\u -> liftToEvent $ mockSendEmails (aGetTime actor) ei u)
-        (U.readChan o)
+        (fmap coerceUuidFor <$> waitUpdate)
         store
     link a
     bracket
@@ -260,13 +260,15 @@ checkInbox eo ea et =
         | otherwise = fail $ "Bad email: " ++ show (a, t)
 
 mockSendEmails
-  :: IO DateTime -> U.InChan Email -> UUID
+  :: IO DateTime -> U.InChan Email -> UuidFor (TimeStamped EmailEvent)
   -> EventT (TimeStamped EmailEvent) IO ()
-mockSendEmails getT i uuid = do
-    s <- getState initialEmailProjection uuid
+mockSendEmails getT i uuid' = do
+    s <- getState initialEmailProjection $ unUuidFor uuid'
     mapM_ (sendEmail s) $ condenseConsecutive $ esPendingEmails s
   where
     sendEmail s emailType = do
         t <- liftIO getT
-        liftIO $ U.writeChan i $ Email (esEmailAddress s) emailType (UuidFor uuid)
-        logEvents uuid AnyPosition [(t, EmailSentEmailEvent emailType)]
+        liftIO $ U.writeChan i $
+            Email (esEmailAddress s) emailType (coerceUuidFor uuid')
+        logEvents (unUuidFor uuid') AnyPosition
+            [(t, EmailSentEmailEvent emailType)]

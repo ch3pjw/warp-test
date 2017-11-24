@@ -10,9 +10,9 @@ module ReadView
   ( DB.EntityField(..)
   , ViewSequenceNumberId
   , ReadView(..)
-  , simpleReadView
+  , readView, simpleReadView
   , viewWorker
-  , runWorkers
+  , runReadViews
   , liftReadView
   ) where
 
@@ -24,7 +24,6 @@ import Data.Aeson (ToJSON, FromJSON)
 import Data.Monoid
 import Data.Pool (Pool)
 import Data.Text (Text, unpack)
-import Data.UUID (UUID)
 import Database.Persist.Postgresql ((=.), (==.))
 import qualified Database.Persist.Postgresql as DB
 import Database.Persist.TH (
@@ -38,6 +37,7 @@ import Eventful.Store.Sql (
     jsonStringSerializer,
     sqlGlobalEventStoreReader)
 
+import Events (UuidFor(..), coerceUuidFor)
 import Store (eventStoreConfig, untilNothing)
 
 
@@ -49,24 +49,31 @@ ViewSequenceNumber
     deriving Show
 |]
 
+type RvUpdate event
+    = SequenceNumber -> UuidFor event -> EventVersion -> event
+    -> ReaderT DB.SqlBackend IO ()
+
 data ReadView event = ReadView
   { rvTableName :: Text
   , rvMigration :: DB.Migration
-  , rvUpdate :: SequenceNumber -> UUID -> EventVersion -> event -> ReaderT DB.SqlBackend IO ()
+  , rvUpdate :: RvUpdate event
   }
 
 instance Show (ReadView event) where
     show rv = unpack $ "<ReadView " <> (rvTableName rv) <> ">"
 
+readView :: Text -> DB.Migration -> RvUpdate event -> ReadView event
+readView = ReadView
 
 -- | A simple read view doesn't give you access to event version information
 --   from the event log, just events and the keys of the events streams for
 --   those events.
 simpleReadView
-  :: Text -> DB.Migration -> (UUID -> event -> ReaderT DB.SqlBackend IO ())
+  :: Text -> DB.Migration
+  -> (UuidFor event -> event -> ReaderT DB.SqlBackend IO ())
   -> ReadView event
 simpleReadView tableName migration update =
-    ReadView tableName migration update'
+    readView tableName migration update'
   where
     update' _ uuid _ event = update uuid event
 
@@ -90,7 +97,7 @@ handleReadViewEvents rv events = do
   where
     decomposeEvent e = let e' = streamEventEvent e in
         ( streamEventPosition e
-        , streamEventKey e'
+        , UuidFor $ streamEventKey e'
         , streamEventPosition e'
         , streamEventEvent e')
     applyUpdate (globalPos, streamKey, streamPos, streamEventData) =
@@ -125,26 +132,36 @@ updateReadView rv =
 
 viewWorker
   :: (ToJSON event, FromJSON event)
-  => ReadView event -> Pool DB.SqlBackend -> (IO (Maybe a)) -> IO ()
-viewWorker rv pool wait = DB.runSqlPool i pool >> f
+  => ReadView event
+  -> Pool DB.SqlBackend
+  -> (Maybe () -> IO ())
+  -> (IO (Maybe a))
+  -> IO ()
+viewWorker rv pool notify wait = DB.runSqlPool i pool >> f >> notify Nothing
   where
-    f = untilNothing wait (const $ DB.runSqlPool (updateReadView rv) pool)
-    i = initialiseReadView rv >> updateReadView rv
+    f = untilNothing wait (const $ DB.runSqlPool updateAndNotify pool)
+    i = initialiseReadView rv >> updateAndNotify
+    updateAndNotify = updateReadView rv >> liftIO (notify $ Just ())
 
 
-runWorkers
+runReadViews
   :: (ToJSON event, FromJSON event)
-  => [ReadView event] -> Pool DB.SqlBackend -> (IO (IO (Maybe a))) -> IO ()
-runWorkers rvs pool getWait = do
+  => [(Maybe () -> IO (), ReadView event)]
+  -> Pool DB.SqlBackend -> (IO (IO (Maybe a))) -> IO ()
+runReadViews notificationActionsAndRvs pool getWait = do
+    -- Taking the pairs of ReadView and corresponding notification channel feels
+    -- clunky - but the alternative, as we have in Store, where we construct a
+    -- queue internally in an IO action that returns the data structure doesn't
+    -- feel great either...
     DB.runSqlPool (DB.runMigration migrateVSN) pool
-    as <- mapM runViewWorker rvs
+    as <- mapM (uncurry runViewWorker) notificationActionsAndRvs
     mapM_ A.link as
     mapM_ A.wait as
   where
-    runViewWorker rv = A.async $ getWait >>= viewWorker rv pool
+    runViewWorker n rv = A.async $ getWait >>= viewWorker rv pool n
 
 liftReadView :: (event' -> Maybe event) -> ReadView event -> ReadView event'
 liftReadView f rv = rv { rvUpdate = rvUpdate' }
   where
     rvUpdate' sn uuid version event' =
-      maybe (return ()) (rvUpdate rv sn uuid version) (f event')
+      maybe (return ()) (rvUpdate rv sn (coerceUuidFor uuid) version) (f event')

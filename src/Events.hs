@@ -21,8 +21,13 @@ import Data.Aeson.Casing (aesonPrefix, camelCase)
 import Data.Aeson.TH (deriveJSON)
 import qualified Data.Aeson.Types as T
 import Data.DateTime (DateTime)
+import Data.Proxy (Proxy(..))
 import Data.Text (Text)
 import Data.UUID (UUID)
+import Database.Persist (PersistField(..))
+import Database.Persist.Sql (PersistFieldSql(..))
+
+import Eventful.Store.Postgresql () -- For UUID postgresification
 
 import UnionSums (unionSumTypes, mkConverter, mkDecompose)
 
@@ -36,6 +41,13 @@ instance ToJSON (UuidFor event) where
 
 instance FromJSON (UuidFor event) where
   parseJSON = fmap UuidFor . parseJSON
+
+instance PersistField (UuidFor a) where
+  toPersistValue (UuidFor uuid) = toPersistValue uuid
+  fromPersistValue = fmap UuidFor . fromPersistValue
+
+instance PersistFieldSql (UuidFor a) where
+  sqlType _ = sqlType (Proxy :: Proxy UUID)
 
 type EmailAddress = Text
 
