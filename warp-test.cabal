@@ -28,6 +28,7 @@ library
                      , Registration.ReadViews
                      , Router
                      , Sessions
+                     , Sessions.Cookies
                      , Sessions.Model
                      , Sessions.ReadViews
                      , Store
@@ -42,7 +43,9 @@ library
                      , async
                      , blazeT
                      , bytestring
+                     , clientsession
                      , clay
+                     , cookie
                      , cryptohash
                      , datetime
                      , email-validate
