@@ -5,6 +5,8 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module ReadView
   ( DB.EntityField(..)
@@ -91,12 +93,24 @@ latestEvents latestHandled =
     jsonReader = sqlGlobalEventStoreReader eventStoreConfig
     eventReader = serializedGlobalEventStoreReader jsonStringSerializer jsonReader
 
+class IsView a event x | a -> event, a -> x where
+  viewName :: a -> Text
+  viewMigration :: a -> DB.Migration
+  viewUpdate :: a -> RvUpdate event x
+
+instance IsView (ReadView event) event () where
+  viewName = rvTableName
+  viewMigration = rvMigration
+  viewUpdate = rvUpdate
 
 handleReadViewEvents
-  :: ReadView event -> [GlobalStreamEvent event] -> ReaderT DB.SqlBackend IO ()
-handleReadViewEvents rv events = do
-    mapM_ (applyUpdate . decomposeEvent) events
+  :: (IsView a event x, Monoid x)
+  => a -> [GlobalStreamEvent event]
+  -> ReaderT DB.SqlBackend IO x
+handleReadViewEvents v events = do
+    results <- mapM (applyUpdate . decomposeEvent) events
     updateSN events
+    return $ mconcat results
   where
     decomposeEvent e = let e' = streamEventEvent e in
         ( streamEventPosition e
@@ -104,18 +118,19 @@ handleReadViewEvents rv events = do
         , streamEventPosition e'
         , streamEventEvent e')
     applyUpdate (globalPos, streamKey, streamPos, streamEventData) =
-        rvUpdate rv globalPos streamKey streamPos streamEventData
+        viewUpdate v globalPos streamKey streamPos streamEventData
     updateSN [] = return ()
     updateSN es = let latestSN = streamEventPosition $ last es in
         DB.updateWhere
-          [ViewSequenceNumberName ==. rvTableName rv]
+          [ViewSequenceNumberName ==. viewName v]
           [ViewSequenceNumberLatestApplied =. latestSN]
 
 
-initialiseReadView :: ReadView event -> ReaderT DB.SqlBackend IO ()
-initialiseReadView rv = do
-    DB.runMigration $ rvMigration rv
-    void . getOrInitSequenceNumber $ rvTableName rv
+initialiseReadView
+  :: (IsView a event x) => a -> ReaderT DB.SqlBackend IO ()
+initialiseReadView v = do
+    DB.runMigration $ viewMigration v
+    void . getOrInitSequenceNumber $ viewName v
 
 getOrInitSequenceNumber :: Text -> ReaderT DB.SqlBackend IO SequenceNumber
 getOrInitSequenceNumber tableName = do
@@ -126,25 +141,25 @@ getOrInitSequenceNumber tableName = do
 
 
 updateReadView
-  :: (ToJSON event, FromJSON event)
-  => ReadView event -> ReaderT DB.SqlBackend IO ()
-updateReadView rv =
-      getOrInitSequenceNumber (rvTableName rv) >>=
-      latestEvents >>= handleReadViewEvents rv
+  :: (ToJSON event, FromJSON event, IsView a event x, Monoid x)
+  => a -> ReaderT DB.SqlBackend IO x
+updateReadView v =
+      getOrInitSequenceNumber (viewName v) >>=
+      latestEvents >>= handleReadViewEvents v
 
 
 viewWorker
-  :: (ToJSON event, FromJSON event)
-  => ReadView event
+  :: (ToJSON event, FromJSON event, IsView v event x, Monoid x)
+  => v
   -> Pool DB.SqlBackend
   -> (Maybe () -> IO ())
   -> (IO (Maybe a))
   -> IO ()
-viewWorker rv pool notify wait = DB.runSqlPool i pool >> f >> notify Nothing
+viewWorker v pool notify wait = DB.runSqlPool i pool >> f >> notify Nothing
   where
     f = untilNothing wait (const $ DB.runSqlPool updateAndNotify pool)
-    i = initialiseReadView rv >> updateAndNotify
-    updateAndNotify = updateReadView rv >> liftIO (notify $ Just ())
+    i = initialiseReadView v >> updateAndNotify
+    updateAndNotify = updateReadView v >> liftIO (notify $ Just ())
 
 
 runReadViews
