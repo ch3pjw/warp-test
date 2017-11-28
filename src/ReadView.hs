@@ -49,20 +49,23 @@ ViewSequenceNumber
     deriving Show
 |]
 
-type RvUpdate event
+type RvUpdate event returnType
     = SequenceNumber -> UuidFor event -> EventVersion -> event
-    -> ReaderT DB.SqlBackend IO ()
+    -> ReaderT DB.SqlBackend IO returnType -- FIXME: <- is a terrible name
+
+type SimpleRvUpdate event returnType
+    = UuidFor event -> event -> ReaderT DB.SqlBackend IO returnType -- <- still bad
 
 data ReadView event = ReadView
   { rvTableName :: Text
   , rvMigration :: DB.Migration
-  , rvUpdate :: RvUpdate event
+  , rvUpdate :: RvUpdate event ()
   }
 
 instance Show (ReadView event) where
     show rv = unpack $ "<ReadView " <> (rvTableName rv) <> ">"
 
-readView :: Text -> DB.Migration -> RvUpdate event -> ReadView event
+readView :: Text -> DB.Migration -> RvUpdate event () -> ReadView event
 readView = ReadView
 
 -- | A simple read view doesn't give you access to event version information
@@ -70,7 +73,7 @@ readView = ReadView
 --   those events.
 simpleReadView
   :: Text -> DB.Migration
-  -> (UuidFor event -> event -> ReaderT DB.SqlBackend IO ())
+  -> SimpleRvUpdate event ()
   -> ReadView event
 simpleReadView tableName migration update =
     readView tableName migration update'
