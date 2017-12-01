@@ -5,6 +5,10 @@ module EventT
   , getState
   , logWithLatest
   , mapEvents, liftToEvent
+  , logEvents', logEvents_'
+  , getStreamProjection'
+  , getState'
+  , logWithLatest'
   )
   where
 
@@ -19,7 +23,7 @@ import Eventful
   , StreamEvent, StreamProjection(..), getLatestStreamProjection
   , versionedStreamProjection, EventVersion, Projection)
 
-import Events (Event, ToEvent, toEvent)
+import Events (Event, ToEvent, toEvent, UuidFor(..))
 
 
 type StoreEvents key event m =
@@ -103,3 +107,33 @@ liftToEvent
     -> EventT event m a
     -> EventT Event m a
 liftToEvent f' = mapEvents toEvent f'
+
+
+logEvents'
+    :: (Monad m)
+    => UuidFor event -> ExpectedPosition EventVersion -> [event]
+    -> EventT event m (Maybe (EventWriteError EventVersion))
+logEvents' uuid' = logEvents $ unUuidFor uuid'
+
+logEvents_'
+    :: (Monad m)
+    => UuidFor event -> ExpectedPosition EventVersion -> [event]
+    -> EventT event m ()
+logEvents_' uuid' = logEvents_ $ unUuidFor uuid'
+
+getStreamProjection'
+    :: (Monad m)
+    => Projection state event -> UuidFor event
+    -> EventT event m (StreamProjection UUID EventVersion state event)
+getStreamProjection' proj key = getStreamProjection proj $ unUuidFor key
+
+getState'
+    :: (Monad m)
+    => Projection state event -> UuidFor event -> EventT event m state
+getState' proj uuid' = getState proj $ unUuidFor uuid'
+
+logWithLatest'
+    :: (Monad m)
+    => Projection state event -> UuidFor event -> (state -> ([event], a))
+    -> EventT event m a
+logWithLatest' proj uuid' = logWithLatest proj $ unUuidFor uuid'
