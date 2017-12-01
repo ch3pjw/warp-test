@@ -12,7 +12,7 @@ import Data.Time.Clock
 import Web.ClientSession (Key, encryptIO)
 import qualified Web.Cookie as WC
 
-import Events (SessionEvent, UuidFor)
+import Events (SessionEvent, AccountEvent, UuidFor)
 
 cookieLifeSpan :: NominalDiffTime
 cookieLifeSpan = fromRational . toRational . secondsToDiffTime $
@@ -22,12 +22,13 @@ data SessionCookie
   = SessionCookie
   { scVersion :: Int
   , scSessionUuid :: UuidFor SessionEvent
+  , scAccountUuid :: UuidFor AccountEvent
   } deriving (Eq, Show)
 
 deriveJSON (aesonPrefix camelCase) ''SessionCookie
 
-sessionCookie :: UuidFor SessionEvent -> SessionCookie
-sessionCookie uuid' = SessionCookie 0 uuid'
+sessionCookie :: UuidFor SessionEvent -> UuidFor AccountEvent ->  SessionCookie
+sessionCookie sUuid' aUuid' = SessionCookie 0 sUuid' aUuid'
 
 -- | Generates a new, uniquely encrypted SetCookie, with a calculated exipry
 --   time determined by the current system time.
