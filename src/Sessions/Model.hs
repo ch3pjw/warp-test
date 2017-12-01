@@ -5,7 +5,7 @@ module Sessions.Model where
 import Control.Monad (when, void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.DateTime (DateTime)
-import Data.Time.Clock (NominalDiffTime, secondsToDiffTime, addUTCTime)
+import Data.Time.Clock (NominalDiffTime, addUTCTime)
 import Data.UUID.V4 (nextRandom)
 
 import Eventful (ExpectedPosition(..), Projection(..))
@@ -14,13 +14,12 @@ import Events
   ( EmailAddress, SessionEvent(..), UuidFor(..), UserAgentString, TimeStamped)
 import EventT
   ( EventT, logEvents, logEvents_, getState)
+import Scheduler (mkTimeout)
 import Store (reactivelyRunEventT)
 
 
 sessionActivationTimeout :: NominalDiffTime
-sessionActivationTimeout =
-  fromRational . toRational $
-  secondsToDiffTime $ 15 * 60
+sessionActivationTimeout = mkTimeout $ 15 * 60
 
 data SessionStage
   = Inactive
