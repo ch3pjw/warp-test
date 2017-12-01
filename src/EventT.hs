@@ -1,6 +1,7 @@
 module EventT
   ( EventT, runEventT
   , logEvents, logEvents_
+  , getStreamProjection
   , getState
   , mapEvents, liftToEvent
   )
@@ -49,12 +50,19 @@ logEvents_
     -> EventT event m ()
 logEvents_ uuid pos = void . logEvents uuid pos
 
+-- | Given an initial stream projection, retrieve the events for the stream
+-- identified by the given UUID apply them, returning the latest projection.
+getStreamProjection
+    :: (Monad m)
+    => Projection state event -> UUID
+    -> EventT event m (StreamProjection UUID EventVersion state event)
+getStreamProjection proj key = ask >>= (\(reader, _) -> lift $
+     getLatestStreamProjection reader (versionedStreamProjection key proj))
+
 getState
     :: (Monad m)
     => Projection state event -> UUID -> EventT event m state
-getState proj key = ask >>= (\(reader, _) -> lift $
-    streamProjectionState <$>
-    getLatestStreamProjection reader (versionedStreamProjection key proj))
+getState proj key = streamProjectionState <$> getStreamProjection proj key
 
 mapEvents
     :: (Monad m) => (event -> event') -> (event' -> Maybe event)
