@@ -3,6 +3,7 @@ module EventT
   , logEvents, logEvents_
   , getStreamProjection
   , getState
+  , logWithLatest
   , mapEvents, liftToEvent
   )
   where
@@ -13,10 +14,10 @@ import Control.Monad.Trans.Reader (ReaderT(..), withReaderT, ask)
 import Data.Maybe (mapMaybe)
 import Data.UUID (UUID)
 
-import Eventful (
-    ExpectedPosition, EventStoreReader(..), EventWriteError, StreamEvent,
-    getLatestStreamProjection, versionedStreamProjection,
-    streamProjectionState, EventVersion, Projection)
+import Eventful
+  ( ExpectedPosition(ExactPosition), EventStoreReader(..), EventWriteError
+  , StreamEvent, StreamProjection(..), getLatestStreamProjection
+  , versionedStreamProjection, EventVersion, Projection)
 
 import Events (Event, ToEvent, toEvent)
 
@@ -63,6 +64,24 @@ getState
     :: (Monad m)
     => Projection state event -> UUID -> EventT event m state
 getState proj key = streamProjectionState <$> getStreamProjection proj key
+
+-- | Use the given initial projection to project the latest state from the
+-- store, use the given (side-effect free) function to generate new events,
+-- which are then committed to the store only if nothing has changed the
+-- projection in the intervening time.
+logWithLatest
+    :: (Monad m)
+    => Projection state event -> UUID -> (state -> ([event], a))
+    -> EventT event m a
+logWithLatest proj uuid f = do
+    streamProj <- getStreamProjection proj uuid
+    let (events, result) = f $ streamProjectionState streamProj
+    mError <- logEvents uuid
+        (ExactPosition $ streamProjectionPosition streamProj)
+        events
+    maybe (return result) retry mError
+  where
+    retry _ = logWithLatest proj uuid f
 
 mapEvents
     :: (Monad m) => (event -> event') -> (event' -> Maybe event)
