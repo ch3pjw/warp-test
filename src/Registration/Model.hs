@@ -33,7 +33,7 @@ import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Data.Time.Clock (NominalDiffTime, secondsToDiffTime, addUTCTime)
+import Data.Time.Clock (NominalDiffTime, addUTCTime)
 import qualified Data.UUID.V5 as UUIDv5
 import System.Environment (getEnv)
 import System.Envy (FromEnv, fromEnv, env)
@@ -50,7 +50,7 @@ import Events (
   Event(..), decomposeEvent, TimeStamped, toEvent)
 import EventT (
   EventT, logEvents_, getState, mapEvents)
-
+import Scheduler (mkTimeout)
 import Store (Store, sRunEventT)
 
 
@@ -59,9 +59,7 @@ type Salt = Text
 
 -- FIXME: from an environment variable or argument
 verificationTimeout :: NominalDiffTime
-verificationTimeout =
-  fromRational . toRational $
-  secondsToDiffTime $ 60 * 60 * 24
+verificationTimeout = mkTimeout $ 60 * 60 * 24
 
 data VerificationState
   = Unverified
