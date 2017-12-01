@@ -1,6 +1,9 @@
 module EventT
-  ( EventT, runEventT, logEvents, logEvents_, getState
-  , mapEvents, liftToEvent)
+  ( EventT, runEventT
+  , logEvents, logEvents_
+  , getState
+  , mapEvents, liftToEvent
+  )
   where
 
 import Control.Monad (void)
