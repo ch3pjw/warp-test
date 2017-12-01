@@ -108,7 +108,7 @@ spec = do
             it "should reject my verification if it is tardy" $
               \(ctx, uuid) ->
                 let actor = tcActor ctx in do
-                clockSetTime (tcClock ctx) $ DateTime.toSeconds $ plusTimeout 2
+                clockSetTime (tcClock ctx) $ fromInteger . DateTime.toSeconds $ plusTimeout 2
                 aVerify actor uuid
                 state <- aPoll actor uuid
                 state `shouldSatisfy`
@@ -117,7 +117,7 @@ spec = do
             it "should accept a resubmission after rejecting my verification" $
               \(ctx, uuid) ->
                 let actor = tcActor ctx in do
-                clockSetTime (tcClock ctx) $ DateTime.toSeconds $ plusTimeout 2
+                clockSetTime (tcClock ctx) $ fromInteger . DateTime.toSeconds $ plusTimeout 2
                 aVerify actor uuid
                 uuid' <- subAndGetEmail actor (tcEmailChanOut ctx)
                 aVerify actor uuid
