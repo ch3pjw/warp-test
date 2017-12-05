@@ -16,6 +16,7 @@ module ReadView
   , viewWorker
   , runReadViews
   , liftReadView
+  , ProcessManager(..), simpleProcessManager
   ) where
 
 import qualified Control.Concurrent.Async as A
@@ -162,6 +163,7 @@ viewWorker v pool notify wait = DB.runSqlPool i pool >> f >> notify Nothing
     updateAndNotify = updateReadView v >>= liftIO . notify . Just
 
 
+-- FIXME: or process managers
 runReadViews
   :: (ToJSON event, FromJSON event, IsView v event x, Monoid x)
   => [(Maybe x -> IO (), v)]
@@ -183,3 +185,26 @@ liftReadView f rv = rv { rvUpdate = rvUpdate' }
   where
     rvUpdate' sn uuid version event' =
       maybe (return ()) (rvUpdate rv sn (coerceUuidFor uuid) version) (f event')
+
+
+data ProcessManager event command = ProcessManager
+  { pmName :: Text
+  , pmMigration :: DB.Migration
+  , pmUpdate :: RvUpdate event [command]
+  , pmPoll :: ReaderT DB.SqlBackend IO [command]
+  }
+
+simpleProcessManager
+  :: Text -> DB.Migration
+  -> SimpleRvUpdate event [command]
+  -> ReaderT DB.SqlBackend IO [command]
+  -> ProcessManager event command
+simpleProcessManager name migration update poll =
+    ProcessManager name migration update' poll
+  where
+    update' _ uuid _ event = update uuid event
+
+instance IsView (ProcessManager event command) event [command] where
+  viewName = pmName
+  viewMigration = pmMigration
+  viewUpdate = pmUpdate
