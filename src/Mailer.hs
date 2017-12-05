@@ -5,6 +5,7 @@ module Mailer
   ( SmtpSettings(..)
   , generateEmail
   , mailer
+  , trySendEmails
   ) where
 
 import Control.Exception (catch, SomeException)
@@ -82,6 +83,14 @@ sendEmails settings emails =
       then mapM_ (flip SMTP.sendMimeMail2 conn) emails
       -- FIXME: fail?
       else putStrLn "SMTP: authentication error."
+
+trySendEmails :: SmtpSettings -> [Mime.Mail] -> IO (Either String ())
+trySendEmails settings emails =
+    sendEmails settings emails >> return (Right ())
+    `catch`
+    (\(e :: SomeException) -> return (Left $ show e))
+
+
 
 
 verificationEmail :: Mime.Address -> Mime.Address -> Text -> Text -> Mime.Mail
