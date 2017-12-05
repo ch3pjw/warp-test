@@ -152,20 +152,20 @@ viewWorker
   :: (ToJSON event, FromJSON event, IsView v event x, Monoid x)
   => v
   -> Pool DB.SqlBackend
-  -> (Maybe () -> IO ())
+  -> (Maybe x -> IO ())
   -> (IO (Maybe a))
   -> IO ()
 viewWorker v pool notify wait = DB.runSqlPool i pool >> f >> notify Nothing
   where
     f = untilNothing wait (const $ DB.runSqlPool updateAndNotify pool)
     i = initialiseReadView v >> updateAndNotify
-    updateAndNotify = updateReadView v >> liftIO (notify $ Just ())
+    updateAndNotify = updateReadView v >>= liftIO . notify . Just
 
 
 runReadViews
-  :: (ToJSON event, FromJSON event)
-  => [(Maybe () -> IO (), ReadView event)]
-  -> Pool DB.SqlBackend -> (IO (IO (Maybe a))) -> IO ()
+  :: (ToJSON event, FromJSON event, IsView v event x, Monoid x)
+  => [(Maybe x -> IO (), v)]
+  -> Pool DB.SqlBackend -> IO (IO (Maybe a)) -> IO ()
 runReadViews notificationActionsAndRvs pool getWait = do
     -- Taking the pairs of ReadView and corresponding notification channel feels
     -- clunky - but the alternative, as we have in Store, where we construct a
