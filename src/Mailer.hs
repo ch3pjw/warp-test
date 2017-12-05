@@ -81,8 +81,7 @@ sendEmails settings emails =
       SMTP.LOGIN (ssUsername settings) (unPassword $ ssPassword settings) conn
     if authSuccess
       then mapM_ (flip SMTP.sendMimeMail2 conn) emails
-      -- FIXME: fail?
-      else putStrLn "SMTP: authentication error."
+      else fail "SMTP: authentication error."
 
 trySendEmails :: SmtpSettings -> [Mime.Mail] -> IO (Either String ())
 trySendEmails settings emails =
