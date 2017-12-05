@@ -41,7 +41,7 @@ import qualified Templates
 import Router
 import Middleware (replaceHeaders)
 import Templates (s, StaticResources)
-import WaiUtils (redir, htmlResponse, htmlResponse', jsonResponse, cssResponse)
+import WaiUtils (redir, respondHtml, respondHtml', respondJson, respondCss)
 
 
 -- Redirect sub-application
@@ -61,7 +61,7 @@ defaultApp req sendResponse =
 
 
 interestedSubmissionGet :: (MonadReader StaticResources m) => Wai.ApplicationT m
-interestedSubmissionGet = htmlResponse $ Templates.emailSubmission False
+interestedSubmissionGet = respondHtml $ Templates.emailSubmission False
 
 
 -- | This is posted by the web form
@@ -83,7 +83,7 @@ interestedCollectionPost actor req sendResponse = do
             liftIO $ aSubmitEmailAddress actor $ decodeUtf8 canonical
             submissionResponse (decodeUtf8 canonical) req sendResponse
       Nothing ->
-        htmlResponse' HTTP.status400 (Templates.emailSubmission True)
+        respondHtml' HTTP.status400 (Templates.emailSubmission True)
         req sendResponse
 
 
@@ -96,23 +96,23 @@ interestedCollectionGet pool req sendResponse = do
          [EmailRegistrationVerified ==. True]
          [DB.Asc EmailRegistrationId])
       pool
-  jsonResponse
+  respondJson
     (emailRegistrationEmailAddress . DB.entityVal <$> entities)
     req sendResponse
 
 
 submissionResponse
   :: (MonadReader StaticResources m) => Text -> Wai.ApplicationT m
-submissionResponse email = htmlResponse $
+submissionResponse email = respondHtml $
   Templates.emailSubmissionConfirmation email
 
 
 unsubscriptionResponse :: (MonadReader StaticResources m) => Wai.ApplicationT m
-unsubscriptionResponse = htmlResponse Templates.emailUnsubscriptionConfirmation
+unsubscriptionResponse = respondHtml Templates.emailUnsubscriptionConfirmation
 
 
 verificationResponse :: (MonadReader StaticResources m) => Wai.ApplicationT m
-verificationResponse = htmlResponse Templates.emailVerificationConfirmation
+verificationResponse = respondHtml Templates.emailVerificationConfirmation
 
 
 -- FIXME: this might want to be from the environment
@@ -136,16 +136,16 @@ interestedResource actor name req sendResponse =
           -- successfully verified:
           liftIO $ aVerify actor uuid
           verificationResponse req sendResponse
-        else htmlResponse' HTTP.status404 verErrHtml req sendResponse
+        else respondHtml' HTTP.status404 verErrHtml req sendResponse
     go (Just "verify") Nothing =
-        htmlResponse' HTTP.status404 verErrHtml req sendResponse
+        respondHtml' HTTP.status404 verErrHtml req sendResponse
     go (Just "unsubscribe") (Just uuid) = do
         present <- hasEmail uuid
         when present $ liftIO $ aUnsubscribe actor uuid
         unsubscriptionResponse req sendResponse
     go (Just "unsubscribe") Nothing = unsubscriptionResponse req sendResponse
-    go _ Nothing = htmlResponse' HTTP.status404 genericErrHtml req sendResponse
-    go _ _ = htmlResponse' HTTP.status400 genericErrHtml req sendResponse
+    go _ Nothing = respondHtml' HTTP.status404 genericErrHtml req sendResponse
+    go _ _ = respondHtml' HTTP.status400 genericErrHtml req sendResponse
     getVerb = join . lookup "action" . HTTP.queryToQueryText . Wai.queryString
     -- FIXME: this poll is a bit of a hack; when we have a read view, we should
     -- really be querying that.
@@ -177,7 +177,7 @@ interestedResource actor name req sendResponse =
 
 
 screenCss :: (Monad m) => Wai.ApplicationT m
-screenCss = cssResponse . flattenResponsive 600 $ mainLayout <> mainStyling
+screenCss = respondCss . flattenResponsive 600 $ mainLayout <> mainStyling
 
 
 templatedErrorTransform
@@ -201,7 +201,7 @@ generatePreviews
 generatePreviews pairs = ("previews", getEp menu <|> childEps children)
   where
     sorted = sortBy (\a1 a2 -> (fst a1) `compare` (fst a2)) pairs
-    menu = htmlResponse $ H.docTypeHtml $ do
+    menu = respondHtml $ H.docTypeHtml $ do
       H.head $ do
         H.title $ "Preview Pages"
       H.body $ do

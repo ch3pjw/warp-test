@@ -33,29 +33,29 @@ respond contentType status body _ sendResponse =
     sendResponse $ Wai.responseLBS
       status [(HTTP.hContentType, ctString contentType)] body
 
-textResponse' :: HTTP.Status -> LBS.ByteString -> Wai.Application
-textResponse' = respond CTPlainText
+respondText' :: HTTP.Status -> LBS.ByteString -> Wai.Application
+respondText' = respond CTPlainText
 
-textResponse :: LBS.ByteString -> Wai.Application
-textResponse = textResponse' HTTP.status200
+respondText :: LBS.ByteString -> Wai.Application
+respondText = respondText' HTTP.status200
 
-htmlResponse' :: (Monad m) => HTTP.Status -> HtmlT m () -> Wai.ApplicationT m
-htmlResponse' status html req sendResponse = do
+respondHtml' :: (Monad m) => HTTP.Status -> HtmlT m () -> Wai.ApplicationT m
+respondHtml' status html req sendResponse = do
     bs <- H.execWith renderHtml html
     respond CTHtml status bs req sendResponse
 
-htmlResponse :: (Monad m) => HtmlT m () -> Wai.ApplicationT m
-htmlResponse = htmlResponse' HTTP.status200
+respondHtml :: (Monad m) => HtmlT m () -> Wai.ApplicationT m
+respondHtml = respondHtml' HTTP.status200
 
-cssResponse :: (Monad m) => Css -> Wai.ApplicationT m
-cssResponse css = respond CTCss HTTP.status200 (encodeUtf8 $ render css)
+respondCss :: (Monad m) => Css -> Wai.ApplicationT m
+respondCss css = respond CTCss HTTP.status200 (encodeUtf8 $ render css)
 
-jsonResponse :: (Monad m, JSON.ToJSON a) => a -> Wai.ApplicationT m
-jsonResponse x = respond CTJson HTTP.status200 (JSON.encode x)
+respondJson :: (Monad m, JSON.ToJSON a) => a -> Wai.ApplicationT m
+respondJson x = respond CTJson HTTP.status200 (JSON.encode x)
 
-errorResponse
+respondError
   :: HTTP.Status -> BS.ByteString -> [BS.ByteString] -> Wai.Application
-errorResponse status title msgs _ sendResponse =
+respondError status title msgs _ sendResponse =
     sendResponse $ Wai.responseLBS status headers ""
   where
     headers = fmap ((,) "X-Error-Message") $ title : msgs
