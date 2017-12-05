@@ -3,15 +3,12 @@
 
 module Lib where
 
-import Clay (Css, render)
 import Control.Applicative ((<|>))
 import Control.Monad (join, when)
 import Control.Monad.Reader.Class (MonadReader)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import qualified Data.Aeson as JSON
 import Data.Bifunctor (bimap)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Lazy.UTF8 as LUTF8
 import qualified Data.ByteString.UTF8 as UTF8
 import Data.List (partition, sortBy)
@@ -21,7 +18,6 @@ import Data.String (IsString, fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8)
-import Data.Text.Lazy.Encoding (encodeUtf8)
 import qualified Data.URLEncoded as UrlE
 import qualified Data.UUID as UUID
 import qualified Database.Persist.Postgresql as DB
@@ -45,14 +41,10 @@ import qualified Templates
 import Router
 import Middleware (replaceHeaders)
 import Templates (s, StaticResources)
+import WaiUtils (redir, htmlResponse, htmlResponse', jsonResponse, cssResponse)
 
 
 -- Redirect sub-application
-
-redir :: (Monad m) => BS.ByteString -> Wai.ApplicationT m
-redir url _ sendResponse =
-    sendResponse $ Wai.responseBuilder
-      HTTP.status307 [(HTTP.hLocation, url)] mempty
 
 githubRedir :: (Monad m) => BS.ByteString -> Wai.ApplicationT m
 githubRedir user = redir $ "https://github.com/" <> user
@@ -67,47 +59,6 @@ defaultApp req sendResponse =
       [(HTTP.hContentType, "text/plain")]
       (LUTF8.fromString . show $ Wai.requestHeaders req)
 
-data ContentType = CTPlainText | CTJson | CTHtml | CTCss
-
-ctString :: ContentType -> BS.ByteString
-ctString CTPlainText = "text/plain; charset=utf-8"
-ctString CTJson = "application/json; charset=utf-8"
-ctString CTHtml = "text/html; charset=utf-8"
-ctString CTCss = "text/css; charset=utf-8"
-
-respond
-  :: (Monad m) => ContentType -> HTTP.Status -> LBS.ByteString
-  -> Wai.ApplicationT m
-respond contentType status body _ sendResponse =
-    sendResponse $ Wai.responseLBS
-      status [(HTTP.hContentType, ctString contentType)] body
-
-textResponse' :: HTTP.Status -> LBS.ByteString -> Wai.Application
-textResponse' = respond CTPlainText
-
-textResponse :: LBS.ByteString -> Wai.Application
-textResponse = textResponse' HTTP.status200
-
-htmlResponse' :: (Monad m) => HTTP.Status -> HtmlT m () -> Wai.ApplicationT m
-htmlResponse' status html req sendResponse = do
-    bs <- H.execWith renderHtml html
-    respond CTHtml status bs req sendResponse
-
-htmlResponse :: (Monad m) => HtmlT m () -> Wai.ApplicationT m
-htmlResponse = htmlResponse' HTTP.status200
-
-cssResponse :: (Monad m) => Css -> Wai.ApplicationT m
-cssResponse css = respond CTCss HTTP.status200 (encodeUtf8 $ render css)
-
-jsonResponse :: (Monad m, JSON.ToJSON a) => a -> Wai.ApplicationT m
-jsonResponse x = respond CTJson HTTP.status200 (JSON.encode x)
-
-errorResponse
-  :: HTTP.Status -> BS.ByteString -> [BS.ByteString] -> Wai.Application
-errorResponse status title msgs _ sendResponse =
-    sendResponse $ Wai.responseLBS status headers ""
-  where
-    headers = fmap ((,) "X-Error-Message") $ title : msgs
 
 interestedSubmissionGet :: (MonadReader StaticResources m) => Wai.ApplicationT m
 interestedSubmissionGet = htmlResponse $ Templates.emailSubmission False
