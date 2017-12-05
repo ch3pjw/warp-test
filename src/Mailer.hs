@@ -6,6 +6,7 @@ module Mailer
   , generateEmail
   , mailer
   , trySendEmails
+  , SenderAddress(..)
   ) where
 
 import Control.Exception (catch, SomeException)
