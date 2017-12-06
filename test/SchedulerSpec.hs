@@ -6,12 +6,13 @@ import Test.Hspec
 
 import Control.Concurrent.Async
 import Control.Concurrent.MVar
+import Control.Monad (void)
 import qualified Data.DateTime as DateTime
 import Data.Time.Clock (UTCTime)
 import System.Timeout (timeout)
 
 import Scheduler
-  ( newScheduler, schedule, runScheduler
+  ( newScheduler, schedule, runScheduler, stopScheduler
   , actNow, actBefore, actAfter, actBetween
   , QueuedStatus(..))
 
@@ -21,10 +22,18 @@ t0, t1 :: UTCTime
 t0 = DateTime.fromSeconds 0
 t1 = DateTime.fromSeconds 1
 
-shouldFailTake :: (Eq a, Show a) => MVar a -> IO ()
-shouldFailTake v = do
-    maybeResult <- timeout 30000 $ takeMVar v
+shouldTimeout :: (Eq a, Show a) => IO a -> IO ()
+shouldTimeout m = do
+    maybeResult <- timeout 30000 m
     maybeResult `shouldBe` Nothing
+
+shouldBeWithTimeout :: (Eq a, Show a) => IO a -> a -> IO ()
+shouldBeWithTimeout m expected = do
+    maybeResult <- timeout 30000 m
+    maybeResult `shouldBe` Just expected
+
+shouldFailTake :: (Eq a, Show a) => MVar a -> IO ()
+shouldFailTake v = shouldTimeout $ takeMVar v
 
 shouldSucceedTakeExactlyOnce :: (Eq a, Show a) => MVar a -> IO a
 shouldSucceedTakeExactlyOnce v = do
@@ -102,6 +111,24 @@ spec = do
               clockSetTime clock 3
               result <- shouldSucceedTakeExactlyOnce v
               result `shouldBe` '6'
+
+      describe "shutdown" $ do
+        it "should exit the runner thread" $
+          \(_, sched) -> do
+            withAsync (runScheduler sched) $ \a -> do
+              stopScheduler sched
+              wait a `shouldBeWithTimeout` ()
+
+        it "should wait for running threads to exit before returning control" $
+          \(_, sched) -> do
+            v <- newEmptyMVar
+            _status <- schedule sched $ actNow $ void $ takeMVar v
+            withAsync (runScheduler sched) $ \a -> do
+              stopScheduler sched
+              shouldTimeout $ wait a
+              putMVar v '7'
+              wait a `shouldBeWithTimeout` ()
+
   where
     testContext specFunc = do
       clock <- newClock
