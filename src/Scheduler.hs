@@ -66,7 +66,12 @@ data Delayed a
 compareDelayedUntils :: Delayed a -> Delayed a -> Ordering
 compareDelayedUntils d1 d2 = compare (dUntil d1) (dUntil d2)
 
-newtype DelayedList a = DelayedList {unDelayedList :: [Delayed a]} deriving Show
+newtype DelayedList a =
+    DelayedList {unDelayedList :: [Delayed a]} deriving (Eq, Show, Functor)
+
+instance Foldable DelayedList where
+    foldr f acc = foldr (f . dAction) acc . unDelayedList
+    length = length . unDelayedList
 
 dlEmpty :: DelayedList a
 dlEmpty = DelayedList []
@@ -76,9 +81,6 @@ dlSingleton = flip dlInsert dlEmpty
 
 dlInsert :: Delayed a -> DelayedList a -> DelayedList a
 dlInsert d = DelayedList . insertBy compareDelayedUntils d . unDelayedList
-
-dlLength :: DelayedList a -> Int
-dlLength = length . unDelayedList
 
 dlSplitAfter
   :: UTCTime -> DelayedList a -> (DelayedList a, DelayedList a)
