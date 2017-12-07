@@ -12,7 +12,8 @@ import Data.Time.Clock
 import Web.ClientSession (Key, encryptIO)
 import qualified Web.Cookie as WC
 
-import Events (SessionEvent, AccountEvent, UuidFor, TimeStamped)
+import Events (SessionEvent, AccountEvent, TimeStamped)
+import UuidFor (UuidFor)
 
 cookieLifeSpan :: NominalDiffTime
 cookieLifeSpan = fromRational . toRational . secondsToDiffTime $

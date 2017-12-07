@@ -11,10 +11,11 @@ import Data.UUID.V4 (nextRandom)
 import Eventful (ExpectedPosition(..), Projection(..))
 
 import Events
-  ( EmailAddress, SessionEvent(..), UuidFor(..), UserAgentString, TimeStamped)
+  (EmailAddress, SessionEvent(..), AccountEvent, TimeStamped)
 import EventT
   ( EventT, logEvents, logEvents_, getState)
 import Scheduler (mkTimeout)
+import UuidFor (UuidFor(..))
 import Store (reactivelyRunEventT)
 
 

@@ -26,9 +26,9 @@ import Events
          , EmailAddressRemovedEvent
          )
   , TimeStamped
-  , unUuidFor
   )
 import ReadView (ReadView, simpleReadView)
+import UuidFor (unUuidFor)
 
 share [mkPersist sqlSettings, mkMigrate "migrateER"] [persistLowerCase|
 EmailRegistration

@@ -23,7 +23,8 @@ import Eventful
   , StreamEvent, StreamProjection(..), getLatestStreamProjection
   , versionedStreamProjection, EventVersion, Projection)
 
-import Events (Event, ToEvent, toEvent, UuidFor(..))
+import Events (Event, ToEvent, toEvent, TimeStamped)
+import UuidFor (UuidFor(..))
 
 
 type StoreEvents key event m =

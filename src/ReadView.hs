@@ -40,8 +40,8 @@ import Eventful.Store.Sql (
     jsonStringSerializer,
     sqlGlobalEventStoreReader)
 
-import Events (UuidFor(..), coerceUuidFor)
 import Store (eventStoreConfig, untilNothing)
+import UuidFor (UuidFor(..), coerceUuidFor)
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateVSN"] [persistLowerCase|

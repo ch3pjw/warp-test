@@ -46,12 +46,13 @@ import Eventful (
   )
 
 import Events (
-  EmailAddress, RegistrationEmailType(..), EmailEvent(..), UuidFor(..),
+  EmailAddress, RegistrationEmailType(..), EmailEvent(..),
   Event(..), decomposeEvent, TimeStamped, toEvent)
 import EventT (
   EventT, logEvents_, getState, mapEvents)
 import Scheduler (mkTimeout)
 import Store (Store, sRunEventT)
+import UuidFor (UuidFor(..))
 
 
 

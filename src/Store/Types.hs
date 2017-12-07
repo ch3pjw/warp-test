@@ -14,8 +14,8 @@ import Eventful (
     storeAndPublishEvents)
 import Eventful.Store.Class (StreamEvent)
 
-import Events (UuidFor(..))
 import EventT (EventT, runEventT)
+import UuidFor (UuidFor(..))
 
 data Store m event = Store
   { sGetWaitUpdate :: IO (IO (Maybe (UuidFor event)))

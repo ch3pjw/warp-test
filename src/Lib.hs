@@ -32,7 +32,6 @@ import Text.BlazeT.Renderer.Utf8 (renderHtml)
 import qualified Text.Email.Validate as Email
 
 import Css
-import Events (UuidFor(..))
 import Registration (
     EmailActor, aPoll, aSubmitEmailAddress, aVerify, aUnsubscribe,
     esEmailAddress, emailRegistrationEmailAddress,
@@ -41,6 +40,7 @@ import qualified Templates
 import Router
 import Middleware (replaceHeaders)
 import Templates (s, StaticResources)
+import UuidFor (UuidFor(..))
 import WaiUtils (redir, respondHtml, respondHtml', respondJson, respondCss)
 
 

@@ -24,8 +24,7 @@ import qualified Network.Mail.Mime as Mime
 import Eventful (ExpectedPosition(AnyPosition))
 
 import Events
-  ( UuidFor, unUuidFor
-  , RegistrationEmailType(..)
+  ( RegistrationEmailType(..)
   , Event, toEvent
   , EmailEvent(EmailSentEmailEvent))
 import EventT (mapEvents, getState, logEvents_)
@@ -36,6 +35,7 @@ import Registration (
   condenseConsecutive,
   slightlySaferEventToEmailEvent)
 import Types (Password(..), EnvToggle(..))
+import UuidFor (UuidFor(..))
 
 
 data SmtpSettings = SmtpSettings

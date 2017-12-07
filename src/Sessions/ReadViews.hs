@@ -19,8 +19,9 @@ import Eventful.Store.Postgresql () -- For UUID postgresification
 
 import Events
   ( EmailAddress, UserAgentString(..), Event, SessionEvent(..), AccountEvent
-  , EmailEvent, TimeStamped, decomposeEvent, UuidFor)
+  , EmailAddressEvent(..), TimeStamped, decomposeEvent, SessionCommand(..))
 import ReadView (ReadView, simpleReadView, liftReadView)
+import UuidFor (UuidFor, coerceUuidFor)
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateAS"] [persistLowerCase|
