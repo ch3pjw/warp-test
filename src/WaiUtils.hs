@@ -59,3 +59,10 @@ respondError status title msgs _ sendResponse =
     sendResponse $ Wai.responseLBS status headers ""
   where
     headers = fmap ((,) "X-Error-Message") $ title : msgs
+
+sendResponseWithHeader
+    :: HTTP.HeaderName -> BS.ByteString -> (Wai.Response -> t)
+    -> Wai.Response -> t
+sendResponseWithHeader headerName headerValue sendResponse response =
+    sendResponse $
+        Wai.mapResponseHeaders  ((headerName, headerValue) :) response
