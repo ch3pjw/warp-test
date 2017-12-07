@@ -96,6 +96,3 @@ initialSessionProjection = Projection initialSessionState updateSessionState
 --         when (ssStage sessionState /= Terminated) $
 --           logEvents_ (unUuidFor uuid') AnyPosition
 --             [(t, SessionSignedOutSessionEvent)]
-
-untilJust :: (Monad m) => m (Maybe a) -> m a
-untilJust m = m >>= maybe (untilJust m) return

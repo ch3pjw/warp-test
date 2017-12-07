@@ -29,3 +29,7 @@ instance Var EnvToggle where
 instance Var URI where
     fromVar = parseURI
     toVar = show
+
+
+untilJust :: (Monad m) => m (Maybe a) -> m a
+untilJust m = m >>= maybe (untilJust m) return
