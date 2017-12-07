@@ -2,6 +2,7 @@ module UuidFor
   ( UuidFor(..)
   , coerceUuidFor
   , toText
+  , newRandom
   ) where
 
 import Control.Monad.IO.Class (MonadIO, liftIO)
@@ -37,3 +38,6 @@ instance PersistFieldSql (UuidFor a) where
 
 toText :: UuidFor a -> Text
 toText = UUID.toText . unUuidFor
+
+newRandom :: (MonadIO m) => m (UuidFor x)
+newRandom = UuidFor <$> liftIO nextRandom
