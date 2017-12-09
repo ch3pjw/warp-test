@@ -33,3 +33,6 @@ instance Var URI where
 
 untilJust :: (Monad m) => m (Maybe a) -> m a
 untilJust m = m >>= maybe (untilJust m) return
+
+untilNothing :: (Monad m) => m (Maybe a) -> m ()
+untilNothing m = m >>= maybe (return ()) (const $ untilNothing m)

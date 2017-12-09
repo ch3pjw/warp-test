@@ -3,19 +3,21 @@ module EventT
   , logEvents, logEvents_
   , getStreamProjection
   , getState
-  , logWithLatest
-  , mapEvents, liftToEvent
+  , logWithLatest, logWithLatest_
+  , mapEvents, liftToEvent, timeStamp
   , logEvents', logEvents_'
   , getStreamProjection'
   , getState'
-  , logWithLatest'
+  , logWithLatest', logWithLatest_'
   )
   where
 
 import Control.Monad (void)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Reader (ReaderT(..), withReaderT, ask)
 import Data.Maybe (mapMaybe)
+import Data.Time.Clock (UTCTime)
 import Data.UUID (UUID)
 
 import Eventful
@@ -44,6 +46,8 @@ runEventT
     -> StoreEvents UUID event m -> m a
 runEventT et esr se = runReaderT et (esr, se)
 
+-- FIXME: this should probably translate the kinda unhelpful "maybe error" into
+-- something more canonical, like "Either String ()"
 logEvents
     :: (Monad m)
     => UUID -> ExpectedPosition EventVersion -> [event]
@@ -88,6 +92,12 @@ logWithLatest proj uuid f = do
   where
     retry _ = logWithLatest proj uuid f
 
+logWithLatest_
+  :: (Monad m)
+  => Projection state event -> UUID -> (state -> [event])
+  -> EventT event m ()
+logWithLatest_ proj uuid f = logWithLatest proj uuid $ flip (,) () . f
+
 mapEvents
     :: (Monad m) => (event -> event') -> (event' -> Maybe event)
     -> EventT event m a
@@ -108,6 +118,19 @@ liftToEvent
     -> EventT event m a
     -> EventT Event m a
 liftToEvent f' = mapEvents toEvent f'
+
+timeStamp
+  :: (MonadIO m)
+  => IO UTCTime -> EventT event m a
+  -> EventT (TimeStamped event) m a
+timeStamp getT eventT = withReaderT convert eventT
+  where
+    convert (esr, storeEvents) =
+      ( fmap (fmap snd) esr
+      , \k p es -> liftIO (tagTime es) >>= storeEvents k p)
+
+    tagTime :: [event] -> IO [TimeStamped event]
+    tagTime = traverse (\e -> flip (,) e <$> getT)
 
 
 logEvents'
@@ -138,3 +161,9 @@ logWithLatest'
     => Projection state event -> UuidFor event -> (state -> ([event], a))
     -> EventT event m a
 logWithLatest' proj uuid' = logWithLatest proj $ unUuidFor uuid'
+
+logWithLatest_'
+    :: (Monad m)
+    => Projection state event -> UuidFor event -> (state -> [event])
+    -> EventT event m ()
+logWithLatest_' proj uuid' = logWithLatest_ proj $ unUuidFor uuid'

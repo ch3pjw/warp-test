@@ -20,6 +20,8 @@ import Eventful.Store.Postgresql () -- For UUID postgresification
 
 newtype UuidFor event = UuidFor {unUuidFor :: UUID} deriving (Eq, Show)
 
+-- FIXME: probably only want to allow this for sneaking between time stamped and
+-- un-timestamped event types.
 coerceUuidFor :: UuidFor event -> UuidFor event'
 coerceUuidFor = UuidFor . unUuidFor
 

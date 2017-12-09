@@ -17,6 +17,7 @@ module Registration.Model
   , initialEmailProjection
   , EmailStore
   , unsafeEventToEmailEvent, slightlySaferEventToEmailEvent
+  , hashEmail
   ) where
 
 import Prelude hiding (fail)
@@ -166,12 +167,12 @@ newEmailActor salt getT store = EmailActor
           logEvents_ uuid AnyPosition [(t, EmailAddressRemovedEmailEvent)]
 
 unsafeEventToEmailEvent :: TimeStamped Event -> TimeStamped EmailEvent
-unsafeEventToEmailEvent = fmap $ decomposeEvent id (error "no!") (error "wrong!")
+unsafeEventToEmailEvent = fmap $ decomposeEvent id (error "fudge!") (error "no!") (error "wrong!")
 
 slightlySaferEventToEmailEvent
     :: TimeStamped Event -> Maybe (TimeStamped EmailEvent)
 slightlySaferEventToEmailEvent =
-    traverse $ decomposeEvent Just (const Nothing) (const Nothing)
+    traverse $ decomposeEvent Just (const Nothing) (const Nothing) (const Nothing)
 
 hashEmail :: Salt -> EmailAddress -> UuidFor EmailEvent
 hashEmail salt email =

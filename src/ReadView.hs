@@ -11,8 +11,8 @@
 module ReadView
   ( DB.EntityField(..)
   , ViewSequenceNumberId
-  , ReadView(..)
-  , readView, simpleReadView
+  , ReadView(..), RvUpdate
+  , readView, simpleReadView, SimpleRvUpdate
   , viewWorker
   , runReadViews
   , liftReadView
@@ -52,6 +52,7 @@ ViewSequenceNumber
     deriving Show
 |]
 
+-- FIXME: name!!!
 type RvUpdate event returnType
     = SequenceNumber -> UuidFor event -> EventVersion -> event
     -> ReaderT DB.SqlBackend IO returnType -- FIXME: <- is a terrible name

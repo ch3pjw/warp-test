@@ -16,7 +16,14 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   ghc-options:         -Wall
-  exposed-modules:     Css
+  exposed-modules:     Accounts
+                     , Accounts.Model
+                     , Accounts.CommandHandler
+                     , Css
+                     , EmailAddress
+                     , EmailAddress.CommandHandler
+                     , EmailAddress.Model
+                     , EmailAddress.ReadViews
                      , Events
                      , EventT
                      , Lib
@@ -29,8 +36,11 @@ library
                      , Router
                      , Scheduler
                      , Sessions
+                     , Sessions.CommandHandler
                      , Sessions.Cookies
+                     , Sessions.Email
                      , Sessions.Model
+                     , Sessions.Pages
                      , Sessions.ReadViews
                      , Store
                      , Store.Types
@@ -44,6 +54,7 @@ library
                      , aeson
                      , aeson-casing
                      , async
+                     , blaze-builder
                      , blazeT
                      , bytestring
                      , clientsession
@@ -95,6 +106,7 @@ executable warp-test-exe
   build-depends:       base
                      , async
                      , bytestring
+                     , clientsession
                      , datetime
                      , envy
                      , monad-logger

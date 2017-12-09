@@ -5,7 +5,7 @@ module Main where
 
 import Control.Concurrent.Async
 import Control.Applicative
-import qualified Control.Concurrent.Chan.Unagi as U
+import Control.Monad (void)
 import Control.Monad.Logger (runNoLoggingT)
 import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Data.ByteString as BS
@@ -20,16 +20,34 @@ import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Trans as Wai
 import Network.Wai.Middleware.HttpAuth (basicAuth)
 import System.Envy (FromEnv, fromEnv, env, envMaybe, decodeEnv)
+import qualified Web.ClientSession as ClientSession
 
-import Registration
-import ReadView (runReadViews)
-import Store (newDBStore, sGetWaitUpdate)
-import Types (Password(..), EnvToggle(..))
-import Mailer
+import Events
+  (Command, AccountCommand, SessionCommand, decomposeCommand, SessionEvent)
+import EventT (timeStamp)
 import Lib
-import Router
-import Templates
 import Middleware (forceTls, prettifyError')
+import ReadView (runReadViews)
+import Registration
+import Router
+import Scheduler
+  ( Scheduler, newScheduler, schedule, runScheduler, stopScheduler
+  , normalTimeInterface, Scheduled(..))
+import Store (newDBStore, sGetWaitUpdate, sRunEventT)
+import Templates
+import Types (Password(..), EnvToggle(..))
+import UuidFor (UuidFor, coerceUuidFor)
+import qualified UuidFor as UuidFor
+import WaiUtils (respondHtml)
+
+import Accounts.CommandHandler (mkAccountCommandHandler)
+
+import Sessions.CommandHandler
+  ( newSessionUserActor, SessionUserActor(..), mkSessionCommandHandler
+  , liftSessionEventT)
+import Sessions.Pages
+  (homePageContent, signInPost, signInResource, signOutResource)
+import Sessions.ReadViews (activeSessionProcessManager)
 
 
 data ServerConfig = ServerConfig
@@ -58,35 +76,56 @@ main = do
     senderAddr <- decodeEnv'
     regConfig <- decodeEnv'
     static <- decodeEnv'
+    cookieEncryptionKey <- ClientSession.getKeyEnv "COOKIE_KEY"
 
     -- Do a bunch of initialisation:
     pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr $ rcDatabaseConfig regConfig) 2)
     store <- newDBStore pool
-    waitStoreUpdate <- sGetWaitUpdate store
-    let actor = newEmailActor (rcUuidSalt regConfig) getCurrentTime store
+    let sessionActor = newSessionUserActor getCurrentTime store
 
     let authMiddleware = buildAuth
           (scUsername serverConfig) (scPassword serverConfig)
-    let icp = interestedCollectionPost actor
-    let ir = interestedResource actor
+    let sip = signInPost $ suaRequestSession sessionActor
+    let sig = signInResource cookieEncryptionKey $ suaSignIn sessionActor
+    let sog = signOutResource $ suaSignOut sessionActor
     let ig = interestedCollectionGet pool
     let errHandler = prettifyError' $ templatedErrorTransform errorTemplate
     -- FIXME: runReaderT' for authMiddleware:
-    let app = wrapApp static $ errHandler $ dispatch $ root icp ir ig (Wai.liftMiddleware (runReaderT' static) authMiddleware)
-    let genEmail = generateEmail senderAddr
-          (formatVLink $ scDomain serverConfig)
-          (formatULink $ scDomain serverConfig)
+    let app = wrapApp static $ errHandler $ dispatch $ root sip sig sog ig
+          (Wai.liftMiddleware (runReaderT' static) authMiddleware)
 
     let getWait = sGetWaitUpdate store
-    (esUpdateIn, esUpdateOut) <- U.newChan
+    scheduler <- newScheduler normalTimeInterface
+    let sessionCmdHandler =
+          sRunEventT store . timeStamp getCurrentTime . liftSessionEventT
+          . mkSessionCommandHandler senderAddr smtpSettings
+            (formatSignInLink $ scDomain serverConfig)
+          :: SessionCommand -> IO ()
+    let acctCmdHandler =
+          sRunEventT store . timeStamp getCurrentTime
+          . mkAccountCommandHandler (coerceUuidFor . hashEmail (rcUuidSalt regConfig))
+          :: AccountCommand -> IO ()
+    let cmdHandler = scheduleCmds acctCmdHandler sessionCmdHandler scheduler
+    let schedCmds = maybe
+          (stopScheduler scheduler)
+          (mapM_ cmdHandler) :: Maybe [Scheduled Command] -> IO ()
 
-    withAsync (runReadViews [(U.writeChan esUpdateIn, emailStateReadView)] pool getWait) $ \viewWorkerAsync -> do
+    withAsync (runReadViews [(schedCmds, activeSessionProcessManager)] pool getWait) $ \viewWorkerAsync -> do
         link viewWorkerAsync
-        withAsync (mailer genEmail smtpSettings waitStoreUpdate store) $ \mailerAsync -> do
-            link mailerAsync
+        withAsync (runScheduler scheduler) $ \schedulerAsync -> do
+            link schedulerAsync
             if (scAllowInsecure serverConfig)
             then Warp.run (scPort serverConfig) app
             else Warp.run (scPort serverConfig) $ forceTls app
+
+scheduleCmds
+  :: (AccountCommand -> IO ())
+  -> (SessionCommand -> IO ())
+  -> Scheduler
+  -> Scheduled Command -> IO ()
+scheduleCmds aHandler sHandler scheduler =
+    void . schedule scheduler
+    . fmap (decomposeCommand (const $ return ()) aHandler sHandler)
 
 wrapApp :: StaticResources -> Appy -> Wai.Application
 wrapApp static a = Wai.runApplicationT (flip runReaderT static) a
@@ -109,6 +148,10 @@ formatActionLink verb domain uuid =
     "https://" <> domain <> "/interested/" <> UUID.toText uuid
     <> "?action=" <> verb
 
+formatSignInLink :: Text -> UuidFor SessionEvent -> Text
+formatSignInLink domain uuid' =
+    "https://" <> domain <> "/signIn/" <> UuidFor.toText uuid'
+
 
 buildAuth :: BS.ByteString -> Password BS.ByteString -> Wai.Middleware
 buildAuth username password = basicAuth isAllowed "Concert API"
@@ -128,23 +171,26 @@ runReaderT' = flip runReaderT
 
 root
   :: Appy -> (Text -> Appy)
-  -> Appy -> Wai.MiddlewareT WebbyMonad -> Endpoint WebbyMonad
-root icp ir ig authMiddleware =
-  getEp (redir "interested") <|>
+  -> (Text -> Appy) -> Appy -> Wai.MiddlewareT WebbyMonad -> Endpoint WebbyMonad
+root sip sig sog ig authMiddleware =
+  getEp (respondHtml $ homePageContent False) <|>
+  postEp sip <|>
   childEps
     [ ("david", getEp $ githubRedir "foolswood")
     , ("paul", getEp $ githubRedir "ch3pjw")
-    , ("about", getEp $ htmlResponse aboutUs)
-    , ("company", getEp $ htmlResponse companyInfo)
+    , ("about", getEp $ respondHtml aboutUs)
+    , ("company", getEp $ respondHtml companyInfo)
     , ("screen.css", getEp $ screenCss)
     , ("api", authMiddleware <$> childEps
         [ ("interested", getEp ig)
         , previews]
       )
-    , ("interested"
-      , getEp interestedSubmissionGet <|>
-        postEp icp <|>
-        childEp (getEp . ir)
+    , ("signIn"
+      ,
+        childEp (getEp . sig)
+      )
+    , ("signOut"
+      , childEp (getEp . sog)
       )
     ]
   where

@@ -5,6 +5,7 @@ module Events
   ( EmailAddress
   , RegistrationEmailType(..)
   , EmailEvent(..)
+  , EmailAddressEvent(..)
   , AccountEvent(..)
   , UserAgentString(..)
   , SessionEvent(..)
@@ -12,7 +13,11 @@ module Events
   , emailEventToEvent
   , decomposeEvent
   , ToEvent, toEvent
+  , liftProjection
   , TimeStamped
+  , EmailAddressCommand(..), AccountCommand(..), SessionCommand(..), Command(..)
+  , decomposeCommand
+  , ToCommand, toCommand
   ) where
 
 import Data.Aeson (ToJSON, toJSON, FromJSON, parseJSON)
@@ -22,11 +27,14 @@ import qualified Data.Aeson.Types as T
 import Data.DateTime (DateTime)
 import Data.Text (Text)
 
+import Eventful (Projection(..))
+
 import UnionSums (unionSumTypes, mkConverter, mkDecompose)
 
 import UuidFor (UuidFor)
 
 
+type TimeStamped a = (DateTime, a)
 
 type EmailAddress = Text
 
@@ -43,15 +51,22 @@ data EmailEvent
   = EmailAddressSubmittedEmailEvent EmailAddress
   | EmailAddressVerifiedEmailEvent
   | EmailAddressRemovedEmailEvent
-  | EmailAddressAssociatedWithAccountEmailEvent (UuidFor AccountEvent)
   -- System-generated event:
   | EmailSentEmailEvent RegistrationEmailType
-  | AssociationEmailSentEmailEvent
+  deriving (Eq, Show)
+
+data EmailAddressEvent
+  = EmailBoundToAccountEmailAddressEvent
+      EmailAddress (UuidFor (TimeStamped AccountEvent))
+  | EmailRemovedEmailAddressEvent
   deriving (Eq, Show)
 
 data AccountEvent
   = AccountCreatedAccountEvent
   | AccountNameUpdatedAccountEvent Text
+  | ServiceUpdateEmailsEnabledAccountEvent
+  | ServiceUpdateEmailsDisabledAccountEvent
+  | AccountDeletedAccountEvent
   deriving (Eq, Show)
 
 newtype UserAgentString =
@@ -66,17 +81,22 @@ instance FromJSON UserAgentString where
 
 data SessionEvent
   = SessionRequestedSessionEvent EmailAddress
-  | SessionAssociatedWithAccountSessionEvent (UuidFor AccountEvent)
+  | SessionBoundToAccountSessionEvent (UuidFor (TimeStamped AccountEvent))
   | SessionSignInEmailSentSessionEvent
+  | SessionSignInEmailSendingFailedSessionEvent Text
+  | SessionSignInWindowExpiredSessionEvent
   | SessionSignedInSessionEvent UserAgentString
   | SessionSignedOutSessionEvent
   deriving (Eq, Show)
 
-unionSumTypes "Event" [''EmailEvent, ''AccountEvent, ''SessionEvent]
+unionSumTypes "Event"
+  [''EmailEvent, ''EmailAddressEvent, ''AccountEvent, ''SessionEvent]
 mkConverter ''EmailEvent ''Event
+mkConverter ''EmailAddressEvent ''Event
 mkConverter ''AccountEvent ''Event
 mkConverter ''SessionEvent ''Event
-mkDecompose ''Event [''EmailEvent, ''AccountEvent, ''SessionEvent]
+mkDecompose ''Event
+  [''EmailEvent, ''EmailAddressEvent, ''AccountEvent, ''SessionEvent]
 
 deriving instance Eq Event
 deriving instance Show Event
@@ -87,6 +107,9 @@ class ToEvent event where
 
 instance ToEvent EmailEvent where
   toEvent = emailEventToEvent
+
+instance ToEvent EmailAddressEvent where
+  toEvent = emailAddressEventToEvent
 
 instance ToEvent AccountEvent where
   toEvent = accountEventToEvent
@@ -100,4 +123,58 @@ instance ToEvent Event where
 deriveJSON (aesonPrefix camelCase) ''RegistrationEmailType
 deriveJSON (aesonPrefix camelCase) ''Event
 
-type TimeStamped a = (DateTime, a)
+
+liftProjection
+  :: (event' -> Maybe event) -> Projection state event
+  -> Projection state event'
+liftProjection f (Projection seed handler) = Projection seed handler'
+  where
+    handler' state event' = maybe state (handler state) $ f event'
+
+
+data EmailAddressCommand
+  = BindEmailToAccountEmailAddressCommand
+      EmailAddress (UuidFor (TimeStamped AccountEvent))
+  | RemoveEmailEmailAddressCommand (UuidFor (TimeStamped EmailAddressEvent))
+  deriving (Eq, Show)
+
+data AccountCommand
+  = EnsureAccountExistsForEmailAddrAccountCommand EmailAddress
+  | UpdateAccountNameAccountCommand (UuidFor (TimeStamped AccountEvent)) Text
+  | EnableServiceUpdateEmailsAccountCommand
+  | DisableServiceUpdateEmailsAccountCommand
+  deriving (Eq, Show)
+
+data SessionCommand
+  = RequestSessionSessionCommand EmailAddress
+  | BindSessionToAccountSessionCommand
+      (UuidFor (TimeStamped SessionEvent))
+      (UuidFor (TimeStamped AccountEvent))
+  | SendSignInEmailSessionCommand
+      (UuidFor (TimeStamped SessionEvent))
+      EmailAddress
+  | ExpireSessionRequestSessionCommand (UuidFor (TimeStamped SessionEvent))
+  | SignInSessionCommand (UuidFor (TimeStamped SessionEvent)) UserAgentString
+  | SignOutSessionCommand (UuidFor (TimeStamped SessionEvent))
+  deriving (Eq, Show)
+
+unionSumTypes "Command"
+  [''EmailAddressCommand, ''AccountCommand, ''SessionCommand]
+mkConverter ''EmailAddressCommand ''Command
+mkConverter ''AccountCommand ''Command
+mkConverter ''SessionCommand ''Command
+mkDecompose ''Command
+  [''EmailAddressCommand, ''AccountCommand, ''SessionCommand]
+
+
+class ToCommand command where
+  toCommand :: command -> Command
+
+instance ToCommand EmailAddressCommand where
+  toCommand = emailAddressCommandToCommand
+
+instance ToCommand AccountCommand where
+  toCommand = accountCommandToCommand
+
+instance ToCommand SessionCommand where
+  toCommand = sessionCommandToCommand

@@ -2,21 +2,14 @@
 
 module Sessions.Model where
 
-import Control.Monad (when, void)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.DateTime (DateTime)
-import Data.Time.Clock (NominalDiffTime, addUTCTime)
-import Data.UUID.V4 (nextRandom)
+import Data.Time.Clock (NominalDiffTime)
 
-import Eventful (ExpectedPosition(..), Projection(..))
+import Eventful (Projection(..))
 
 import Events
   (EmailAddress, SessionEvent(..), AccountEvent, TimeStamped)
-import EventT
-  ( EventT, logEvents, logEvents_, getState)
 import Scheduler (mkTimeout)
 import UuidFor (UuidFor(..))
-import Store (reactivelyRunEventT)
 
 
 sessionActivationTimeout :: NominalDiffTime
@@ -24,75 +17,35 @@ sessionActivationTimeout = mkTimeout $ 15 * 60
 
 data SessionStage
   = Inactive
-  | Pending DateTime
+  | Pending
+  | Expired -- User did not sign in before time window closed
   | Active
-  | Terminated
+  | Terminated -- User was signed in and is now signed out
   deriving (Eq, Show)
 
 data SessionState
   = SessionState
   { ssEmailAddress :: EmailAddress
   , ssStage :: SessionStage
+  , ssAccountUuid' :: Maybe (UuidFor (TimeStamped AccountEvent))
   } deriving (Eq, Show)
 
-withinActivationPeriod :: DateTime -> SessionState -> Bool
-withinActivationPeriod now (SessionState _ (Pending timeout)) = now < timeout
-withinActivationPeriod _ _ = False
-
 initialSessionState :: SessionState
-initialSessionState = SessionState "" Inactive
+initialSessionState = SessionState "" Inactive Nothing
 
-updateSessionState :: SessionState -> TimeStamped SessionEvent -> SessionState
+updateSessionState :: SessionState -> SessionEvent -> SessionState
 updateSessionState
-  (SessionState _ Inactive) (t, SessionRequestedSessionEvent e) =
-  SessionState e (Pending $ addUTCTime sessionActivationTimeout t)
-updateSessionState s (_, SessionSignedInSessionEvent _) =
+  (SessionState _ Inactive maUuid') (SessionRequestedSessionEvent e) =
+  SessionState e Pending maUuid'
+updateSessionState s (SessionSignInWindowExpiredSessionEvent) =
+  s { ssStage = Expired }
+updateSessionState s (SessionSignedInSessionEvent _) =
   s { ssStage = Active }
-updateSessionState s (_, SessionSignedOutSessionEvent) =
+updateSessionState s (SessionSignedOutSessionEvent) =
   s { ssStage = Terminated }
+updateSessionState s (SessionBoundToAccountSessionEvent aUuid') =
+  s { ssAccountUuid' = Just aUuid' }
 updateSessionState s _ = s
 
-initialSessionProjection :: Projection SessionState (TimeStamped SessionEvent)
+initialSessionProjection :: Projection SessionState SessionEvent
 initialSessionProjection = Projection initialSessionState updateSessionState
-
--- type SessionEventT = EventT (TimeStamped SessionEvent) IO
-
--- data SessionActor
---   = SessionActor
---   { saRequestSession :: EmailAddress -> SessionEventT (UuidFor SessionEvent)
---   , saSignIn
---       :: UuidFor SessionEvent -> UserAgentString
---       -> SessionEventT (Either String ())
---   , saSignOut :: UuidFor SessionEvent -> SessionEventT ()
---   }
-
--- newSessionActor :: IO DateTime -> SessionActor
--- newSessionActor getT = SessionActor requestSession signIn signOut
---   where
---     requestSession emailAddr = do
---         t <- liftIO getT
---         uuid' <- newSessionUuid'
---         -- Logging events can fail if the stream happens to exist (collision),
---         -- so we retry:
---         void $ untilJust $ logEvents (unUuidFor uuid') NoStream
---           [(t, SessionRequestedSessionEvent emailAddr)]
---         return uuid'
---     signIn uuid' uaString = do
---         t <- liftIO getT
---         sessionState <- getState initialSessionProjection (unUuidFor uuid')
---         if withinActivationPeriod t sessionState
---           then do
---               logEvents_ (unUuidFor uuid') AnyPosition
---                 [(t, SessionSignedInSessionEvent uaString)]
---               return $ pure ()
---           else
---               return $ fail "Not within validation period"
---     signOut uuid' = do
---         t <- liftIO getT
---         -- We query the existing session state so that malicious clients can't
---         -- note their sign-out link and keep spamming us with sign-out requests
---         -- to fill up the DB:
---         sessionState <- getState initialSessionProjection (unUuidFor uuid')
---         when (ssStage sessionState /= Terminated) $
---           logEvents_ (unUuidFor uuid') AnyPosition
---             [(t, SessionSignedOutSessionEvent)]
