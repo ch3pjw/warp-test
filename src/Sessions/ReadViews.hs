@@ -107,6 +107,9 @@ updateActiveSession uuid' (_t, SessionSignedOutSessionEvent) = do
     DB.deleteBy $ UniqueSessionPMActiveSessionUuid uuid'
     return []
 updateActiveSession uuid' (t, SessionSignInEmailSentSessionEvent) = do
+    DB.updateWhere
+      [SessionPMPendingSessionSessionUuid ==. uuid']
+      [SessionPMPendingSessionEmailSendAttempts +=. 1]
     return [actAfter expiryTime $ ExpireSessionRequestCommand uuid']
   where
     expiryTime = addUTCTime sessionActivationTimeout t
