@@ -142,20 +142,13 @@ updateAccountAssociation
 updateAccountAssociation
   eUuid' (_t, EmailBoundToAccountEmailAddressEvent e aUuid') = do
     void $ DB.insertBy $ SessionPMEmailAcctAssoc e eUuid' aUuid'
-    -- DB.updateWhere
-    --   [SessionPMPendingSessionEmailAddress ==. e]
-    --   [SessionPMPendingSessionAccountUuid =. Just aUuid']
-    mEntity <- DB.getBy $ UniqueSessionPMEmailAcctAssocEmailUuid eUuid'
-    case mEntity of
-      Just entity ->
-        let e = sessionPMEmailAcctAssocEmailAddress $ DB.entityVal entity in do
-        sessionUuids <-
-            fmap (sessionPMPendingSessionSessionUuid . DB.entityVal) <$>
-            DB.selectList [SessionPMPendingSessionEmailAddress ==. e] []
-        return $
-            fmap (flip BindSessionToAccountCommand aUuid') sessionUuids
-      -- Don't think we should ever get here in practice
-      Nothing -> return []
+    sessionUuids <-
+        fmap (sessionPMPendingSessionSessionUuid . DB.entityVal) <$>
+        DB.selectList
+          [ SessionPMPendingSessionEmailAddress ==. e
+          , SessionPMPendingSessionAccountUuid ==. Nothing] []
+    return $
+        fmap (flip BindSessionToAccountCommand aUuid') sessionUuids
 updateAccountAssociation eUuid' (_t, EmailRemovedEmailAddressEvent) = do
     DB.deleteBy $ UniqueSessionPMEmailAcctAssocEmailUuid eUuid'
     return []
