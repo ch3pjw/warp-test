@@ -3,6 +3,7 @@
 
 module Sessions.Cookies where
 
+import Blaze.ByteString.Builder (toByteString)
 import Control.Error.Util (note)
 import Data.Aeson (encode, decode)
 import Data.Aeson.TH (deriveJSON)
@@ -20,6 +21,7 @@ import qualified Web.Cookie as WC
 
 import Events (SessionEvent, AccountEvent, TimeStamped)
 import UuidFor (UuidFor)
+import WaiUtils (sendResponseWithHeader)
 
 cookieLifeSpan :: NominalDiffTime
 cookieLifeSpan = fromRational . toRational . secondsToDiffTime $
@@ -86,3 +88,9 @@ expireCookie name = WC.def
   { WC.setCookieName = name
   , WC.setCookieExpires = Just startOfTime
   }
+
+sendResponseWithCookie
+  :: WC.SetCookie -> (Wai.Response -> t) -> Wai.Response -> t
+sendResponseWithCookie sc = sendResponseWithHeader "Set-Cookie" bytes
+  where
+    bytes = toByteString $ WC.renderSetCookie sc

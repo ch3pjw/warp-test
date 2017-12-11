@@ -31,9 +31,11 @@ import Events (EmailAddress, UserAgentString(..), SessionEvent)
 import Lib (helpEmailAddress)
 import Templates (StaticResources, page, s, id_, nbsp, mailto)
 import UuidFor (UuidFor(..))
-import WaiUtils (respondHtml, respondHtml', sendResponseWithHeader, redir)
+import WaiUtils (respondHtml, respondHtml', redir, notFound)
 
-import Sessions.Cookies (SessionCookie, sessionSetCookie)
+import Sessions.Cookies
+  (SessionCookie(..), sessionSetCookie, maybeWithSessionCookie
+  , sendResponseWithCookie, expireCookie)
 
 
 homePageContent :: (MonadReader StaticResources m) => Bool -> HtmlT m ()
@@ -159,9 +161,7 @@ signInResource cookieEncryptionKey doSignIn uuidText req sendResponse =
         -- 404 is always the right code, and if that even matters...
         Nothing -> respondHtml' HTTP.status404 genericErrHtml req sendResponse
         Just sCookie ->
-          let sCookieBS = toByteString $ WC.renderSetCookie sCookie in
-          redir "/" req $
-              sendResponseWithHeader "Set-Cookie" sCookieBS sendResponse
+          redir "/" req $ sendResponseWithCookie sCookie sendResponse
     uaString = UserAgentString $ decodeUtf8 $
         maybe "" id $ Wai.requestHeaderUserAgent req
 
