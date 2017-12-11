@@ -12,6 +12,7 @@ import qualified Data.ByteString as BS
 import Data.DateTime (getCurrentTime)
 import Data.Monoid ((<>))
 import Data.Text (Text)
+import qualified Data.Text.Lazy as LazyText
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Database.Persist.Postgresql as DB
@@ -38,13 +39,14 @@ import Templates
 import Types (Password(..), EnvToggle(..))
 import UuidFor (UuidFor, coerceUuidFor)
 import qualified UuidFor as UuidFor
-import WaiUtils (respondHtml)
+import WaiUtils (respondHtml, respondText)
 
 import Accounts.CommandHandler (mkAccountCommandHandler)
 
 import Sessions.CommandHandler
   ( newSessionUserActor, SessionUserActor(..), mkSessionCommandHandler
   , liftSessionEventT)
+import Sessions.Cookies (maybeWithSessionCookie)
 import Sessions.Pages
   (homePageContent, signInPost, signInResource, signOutResource)
 import Sessions.ReadViews (activeSessionProcessManager)
@@ -85,13 +87,14 @@ main = do
 
     let authMiddleware = buildAuth
           (scUsername serverConfig) (scPassword serverConfig)
+    let hp = homePage cookieEncryptionKey
     let sip = signInPost $ suaRequestSession sessionActor
     let sig = signInResource cookieEncryptionKey $ suaSignIn sessionActor
     let sog = signOutResource $ suaSignOut sessionActor
     let ig = interestedCollectionGet pool
     let errHandler = prettifyError' $ templatedErrorTransform errorTemplate
     -- FIXME: runReaderT' for authMiddleware:
-    let app = wrapApp static $ errHandler $ dispatch $ root sip sig sog ig
+    let app = wrapApp static $ errHandler $ dispatch $ root hp sip sig sog ig
           (Wai.liftMiddleware (runReaderT' static) authMiddleware)
 
     let getWait = sGetWaitUpdate store
@@ -169,11 +172,18 @@ type Appy = Wai.ApplicationT WebbyMonad
 runReaderT' :: r -> ReaderT r m a -> m a
 runReaderT' = flip runReaderT
 
+
+homePage :: ClientSession.Key -> Appy
+homePage key = maybeWithSessionCookie key
+    (respondHtml $ homePageContent False) (respondText . LazyText.pack . show)
+
 root
-  :: Appy -> (Text -> Appy)
-  -> (Text -> Appy) -> Appy -> Wai.MiddlewareT WebbyMonad -> Endpoint WebbyMonad
-root sip sig sog ig authMiddleware =
-  getEp (respondHtml $ homePageContent False) <|>
+  :: Appy -> Appy -> (Text -> Appy)
+  -> (Text -> Appy) -> Appy -> Wai.MiddlewareT WebbyMonad
+  -> Endpoint WebbyMonad
+root hp sip sig sog ig authMiddleware =
+  -- FIXME: these arguments are getting stupid...
+  getEp hp <|>
   postEp sip <|>
   childEps
     [ ("david", getEp $ githubRedir "foolswood")
