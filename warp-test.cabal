@@ -17,8 +17,9 @@ library
   hs-source-dirs:      src
   ghc-options:         -Wall
   exposed-modules:     Accounts
-                     , Accounts.Model
                      , Accounts.CommandHandler
+                     , Accounts.Model
+                     , Accounts.ReadViews
                      , Css
                      , EmailAddress
                      , EmailAddress.CommandHandler
