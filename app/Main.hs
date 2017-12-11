@@ -90,7 +90,7 @@ main = do
     let hp = homePage cookieEncryptionKey
     let sip = signInPost $ suaRequestSession sessionActor
     let sig = signInResource cookieEncryptionKey $ suaSignIn sessionActor
-    let sog = signOutResource $ suaSignOut sessionActor
+    let sog = signOutResource cookieEncryptionKey $ suaSignOut sessionActor
     let ig = interestedCollectionGet pool
     let errHandler = prettifyError' $ templatedErrorTransform errorTemplate
     -- FIXME: runReaderT' for authMiddleware:
@@ -179,7 +179,7 @@ homePage key = maybeWithSessionCookie key
 
 root
   :: Appy -> Appy -> (Text -> Appy)
-  -> (Text -> Appy) -> Appy -> Wai.MiddlewareT WebbyMonad
+  -> Appy -> Appy -> Wai.MiddlewareT WebbyMonad
   -> Endpoint WebbyMonad
 root hp sip sig sog ig authMiddleware =
   -- FIXME: these arguments are getting stupid...
@@ -199,9 +199,7 @@ root hp sip sig sog ig authMiddleware =
       ,
         childEp (getEp . sig)
       )
-    , ("signOut"
-      , childEp (getEp . sog)
-      )
+    , ("signOut", getEp $ sog)
     ]
   where
     previews = generatePreviews

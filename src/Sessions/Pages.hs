@@ -27,7 +27,7 @@ import Web.ClientSession (Key)
 import qualified Web.Cookie as WC
 
 import Css (notificationCss, globalCss, phoneCss, largeCss, padding')
-import Events (EmailAddress, UserAgentString(..), SessionEvent)
+import Events (EmailAddress, UserAgentString(..), SessionEvent, unTsUuidFor)
 import Lib (helpEmailAddress)
 import Templates (StaticResources, page, s, id_, nbsp, mailto)
 import UuidFor (UuidFor(..))
@@ -185,26 +185,11 @@ signInResource cookieEncryptionKey doSignIn uuidText req sendResponse =
 -- actually got the cookie for the session you are signing out of!
 signOutResource
   :: (MonadIO m, MonadReader StaticResources m)
-  => (UuidFor SessionEvent -> IO ()) -> Text -> Wai.ApplicationT m
-signOutResource doSignOut uuidText req sendResponse =
-    go (UuidFor <$> UUID.fromText uuidText)
+  => Key -> (UuidFor SessionEvent -> IO ()) -> Wai.ApplicationT m
+signOutResource key doSignOut =
+    maybeWithSessionCookie key notFound go
   where
-    go (Just sUuid') = do
-      liftIO $ doSignOut sUuid'
-      redir "/" req sendResponse
-    go Nothing = respondHtml' HTTP.status404 genericErrHtml req sendResponse
-
-    genericErrHtml =
-      -- FIXME: make this error correct!
-      page "Unrecognised link" (Just notificationCss) Nothing $ do
-        h1 "Unrecognised link"
-        p $ do
-          s "We didn't recognise the sign in (OR OUT?!) link you visited. You "
-          s "can always try "
-          -- FIXME: implicit path knowledge? Use signInUrl?
-          a ! href "/" $ "signing in"
-          "again."
-        p $ do
-          s "If you need some help, get in touch at "
-          mailto helpEmailAddress "Sign%20in%20help"
-          "."
+    go cookie req sendResponse = do
+      liftIO $ doSignOut $ unTsUuidFor $ scSessionUuid cookie
+      redir "/" req $
+        sendResponseWithCookie (expireCookie "sessionCookie") sendResponse
