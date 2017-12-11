@@ -12,6 +12,8 @@ import qualified Network.Wai as Wai
 import qualified Network.Wai.Trans as Wai
 import qualified Network.HTTP.Types as HTTP
 
+import WaiUtils (methodNotAllowed, notFound)
+
 
 data Endpoint' a = Endpoint'
   { epGet :: Maybe a
@@ -80,16 +82,6 @@ instance Alternative Endpoint' where
 
 
 type Endpoint m = Endpoint' (Wai.ApplicationT m)
-
-
-emptyResponse :: HTTP.Status -> Wai.Response
-emptyResponse s = Wai.responseBuilder s [] mempty
-
-methodNotAllowed :: (Monad m) => Wai.ApplicationT m
-methodNotAllowed _ sendResponse = sendResponse $ emptyResponse HTTP.status405
-
-notFound :: (Monad m) => Wai.ApplicationT m
-notFound _ sendResponse = sendResponse $ emptyResponse HTTP.status404
 
 
 getEp :: (Monad m) => Wai.ApplicationT m -> Endpoint m

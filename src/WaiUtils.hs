@@ -34,6 +34,9 @@ respond contentType status body _ sendResponse =
     sendResponse $ Wai.responseLBS
       status [(HTTP.hContentType, ctString contentType)] body
 
+emptyResponse :: HTTP.Status -> Wai.Response
+emptyResponse s = Wai.responseBuilder s [] mempty
+
 respondText' :: (Monad m) => HTTP.Status -> Text -> Wai.ApplicationT m
 respondText' status = respond CTPlainText status . encodeUtf8
 
@@ -67,3 +70,10 @@ sendResponseWithHeader
 sendResponseWithHeader headerName headerValue sendResponse response =
     sendResponse $
         Wai.mapResponseHeaders  ((headerName, headerValue) :) response
+
+
+methodNotAllowed :: (Monad m) => Wai.ApplicationT m
+methodNotAllowed _ sendResponse = sendResponse $ emptyResponse HTTP.status405
+
+notFound :: (Monad m) => Wai.ApplicationT m
+notFound _ sendResponse = sendResponse $ emptyResponse HTTP.status404
