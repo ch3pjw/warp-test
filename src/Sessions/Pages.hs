@@ -160,7 +160,7 @@ signInResource cookieEncryptionKey doSignIn uuidText req sendResponse =
         Nothing -> respondHtml' HTTP.status404 genericErrHtml req sendResponse
         Just sCookie ->
           let sCookieBS = toByteString $ WC.renderSetCookie sCookie in
-          respondHtml successHtml req $
+          redir "/" req $
               sendResponseWithHeader "Set-Cookie" sCookieBS sendResponse
     uaString = UserAgentString $ decodeUtf8 $
         maybe "" id $ Wai.requestHeaderUserAgent req
@@ -179,12 +179,6 @@ signInResource cookieEncryptionKey doSignIn uuidText req sendResponse =
           s "If you need some help, get in touch at "
           mailto helpEmailAddress "Sign%20in%20help"
           "."
-
-    -- FIXME: actual content
-    successHtml = page "Have a cookie" (Just notificationCss) Nothing $ do
-        h1 "Have a cookie"
-        p $ do
-          s "It seems that you managed to sign in. Congrats!"
 
 
 -- FIXME: this must be protected behind something that checks that you've
