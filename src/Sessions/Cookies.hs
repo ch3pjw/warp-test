@@ -7,9 +7,11 @@ import Control.Error.Util (note)
 import Data.Aeson (encode, decode)
 import Data.Aeson.TH (deriveJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
+import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict, fromStrict)
 import Data.Time.Clock
   (NominalDiffTime, getCurrentTime, secondsToDiffTime, addUTCTime)
+import Data.DateTime (startOfTime)
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Trans as Wai
 import qualified Network.HTTP.Types as HTTP
@@ -77,4 +79,10 @@ acceptCookiePolicySetCookie :: WC.SetCookie
 acceptCookiePolicySetCookie = WC.def
   { WC.setCookieName = "acceptCookiePolicy"
   , WC.setCookieValue = "yes"
+  }
+
+expireCookie :: ByteString -> WC.SetCookie
+expireCookie name = WC.def
+  { WC.setCookieName = name
+  , WC.setCookieExpires = Just startOfTime
   }
