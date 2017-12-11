@@ -3,13 +3,16 @@
 
 module Sessions.Cookies where
 
+import Control.Error.Util (note)
 import Data.Aeson (encode, decode)
 import Data.Aeson.TH (deriveJSON)
 import Data.Aeson.Casing (aesonPrefix, camelCase)
-import Data.ByteString.Lazy (toStrict)
+import Data.ByteString.Lazy (toStrict, fromStrict)
 import Data.Time.Clock
   (NominalDiffTime, getCurrentTime, secondsToDiffTime, addUTCTime)
-import Web.ClientSession (Key, encryptIO)
+import qualified Network.Wai as Wai
+import qualified Network.HTTP.Types as HTTP
+import Web.ClientSession (Key, encryptIO, decrypt)
 import qualified Web.Cookie as WC
 
 import Events (SessionEvent, AccountEvent, TimeStamped)
@@ -41,6 +44,7 @@ sessionSetCookie key cookieData = do
   cipherText <- encryptIO key . toStrict . encode $ cookieData
   t <- getCurrentTime
   return $ WC.def
+    -- FIXME: "cookie" is a little redundent in this name
     { WC.setCookieName = "sessionCookie"
     , WC.setCookieValue = cipherText
     , WC.setCookiePath = Just "/"
@@ -48,8 +52,14 @@ sessionSetCookie key cookieData = do
     , WC.setCookieExpires = Just $ addUTCTime cookieLifeSpan t
    }
 
-decodeSessionCookie :: ()
-decodeSessionCookie = undefined
+retrieveSessionCookie :: Key -> Wai.Request -> Either String SessionCookie
+retrieveSessionCookie key req =
+  note "No cookie headers" (lookup HTTP.hCookie $ Wai.requestHeaders req) >>=
+  return . WC.parseCookies >>=
+  -- FIXME: "sessionCookie" should be a global value
+  note "Session cookie not present" . lookup "sessionCookie" >>=
+  note "Failed to decrypt session cookie" . decrypt key >>=
+  note "Failed to JSON decode session cookie" . decode . fromStrict
 
 acceptCookiePolicySetCookie :: WC.SetCookie
 acceptCookiePolicySetCookie = WC.def
