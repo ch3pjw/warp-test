@@ -14,7 +14,7 @@ module Events
   , decomposeEvent
   , ToEvent, toEvent
   , liftProjection
-  , TimeStamped
+  , TimeStamped, unTsUuidFor, tsUuidFor
   , EmailAddressCommand(..), AccountCommand(..), SessionCommand(..), Command(..)
   , decomposeCommand
   , ToCommand, toCommand
@@ -31,10 +31,19 @@ import Eventful (Projection(..))
 
 import UnionSums (unionSumTypes, mkConverter, mkDecompose)
 
-import UuidFor (UuidFor)
+import UuidFor (UuidFor, coerceUuidFor)
 
 
 type TimeStamped a = (DateTime, a)
+
+-- | A slightly more type-safe version of UuidFor coercion pertaining to time
+-- stamps
+unTsUuidFor :: UuidFor (TimeStamped event) -> UuidFor event
+unTsUuidFor = coerceUuidFor
+
+tsUuidFor :: UuidFor event -> UuidFor (TimeStamped event)
+tsUuidFor = coerceUuidFor
+
 
 type EmailAddress = Text
 
