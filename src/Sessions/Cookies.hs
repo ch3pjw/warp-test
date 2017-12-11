@@ -11,6 +11,7 @@ import Data.ByteString.Lazy (toStrict, fromStrict)
 import Data.Time.Clock
   (NominalDiffTime, getCurrentTime, secondsToDiffTime, addUTCTime)
 import qualified Network.Wai as Wai
+import qualified Network.Wai.Trans as Wai
 import qualified Network.HTTP.Types as HTTP
 import Web.ClientSession (Key, encryptIO, decrypt)
 import qualified Web.Cookie as WC
@@ -60,6 +61,17 @@ retrieveSessionCookie key req =
   note "Session cookie not present" . lookup "sessionCookie" >>=
   note "Failed to decrypt session cookie" . decrypt key >>=
   note "Failed to JSON decode session cookie" . decode . fromStrict
+
+maybeWithSessionCookie
+  :: (Monad m)
+  => Key -> Wai.ApplicationT m -> (SessionCookie -> Wai.ApplicationT m)
+  -> Wai.ApplicationT m
+maybeWithSessionCookie key defApp withScApp req sendResponse =
+    either
+      (const defApp)
+      withScApp
+      (retrieveSessionCookie key req)
+    req sendResponse
 
 acceptCookiePolicySetCookie :: WC.SetCookie
 acceptCookiePolicySetCookie = WC.def
