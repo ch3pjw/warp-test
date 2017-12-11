@@ -6,6 +6,7 @@ import Clay (Css, render)
 import qualified Data.Aeson as JSON
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import Data.Text.Lazy (Text)
 import Data.Text.Lazy.Encoding (encodeUtf8)
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai.Trans as Wai
@@ -33,10 +34,10 @@ respond contentType status body _ sendResponse =
     sendResponse $ Wai.responseLBS
       status [(HTTP.hContentType, ctString contentType)] body
 
-respondText' :: HTTP.Status -> LBS.ByteString -> Wai.Application
-respondText' = respond CTPlainText
+respondText' :: (Monad m) => HTTP.Status -> Text -> Wai.ApplicationT m
+respondText' status = respond CTPlainText status . encodeUtf8
 
-respondText :: LBS.ByteString -> Wai.Application
+respondText :: (Monad m) => Text -> Wai.ApplicationT m
 respondText = respondText' HTTP.status200
 
 respondHtml' :: (Monad m) => HTTP.Status -> HtmlT m () -> Wai.ApplicationT m
