@@ -40,8 +40,8 @@ ensureAccountExistsForEmailAddr genUuid' emailAddr =
       maybeErr <- logEvents' (UuidFor.coerceUuidFor aUuid') NoStream
           [AccountCreatedEvent]
       case maybeErr of
-        Nothing -> return aUuid'
-        _ -> newAcct
+        Right _ -> return aUuid'
+        Left _ -> newAcct
 
 mkAccountCommandHandler
   :: (MonadIO m)

@@ -31,7 +31,7 @@ import UuidFor (UuidFor(..))
 
 type StoreEvents key event m =
     key -> ExpectedPosition EventVersion -> [event]
-    -> m (Maybe (EventWriteError EventVersion))
+    -> m (Either (EventWriteError EventVersion) EventVersion)
 
 type EventT event m
   = ReaderT
@@ -51,7 +51,7 @@ runEventT et esr se = runReaderT et (esr, se)
 logEvents
     :: (Monad m)
     => UUID -> ExpectedPosition EventVersion -> [event]
-    -> EventT event m (Maybe (EventWriteError EventVersion))
+    -> EventT event m (Either (EventWriteError EventVersion) EventVersion)
 logEvents uuid pos events = ask >>= (\(_, se) -> lift $ se uuid pos events)
 
 logEvents_
@@ -85,10 +85,10 @@ logWithLatest
 logWithLatest proj uuid f = do
     streamProj <- getStreamProjection proj uuid
     let (events, result) = f $ streamProjectionState streamProj
-    mError <- logEvents uuid
+    eError <- logEvents uuid
         (ExactPosition $ streamProjectionPosition streamProj)
         events
-    maybe (return result) retry mError
+    either retry (const $ return result) eError
   where
     retry _ = logWithLatest proj uuid f
 
@@ -136,7 +136,7 @@ timeStamp getT eventT = withReaderT convert eventT
 logEvents'
     :: (Monad m)
     => UuidFor event -> ExpectedPosition EventVersion -> [event]
-    -> EventT event m (Maybe (EventWriteError EventVersion))
+    -> EventT event m (Either (EventWriteError EventVersion) EventVersion)
 logEvents' uuid' = logEvents $ unUuidFor uuid'
 
 logEvents_'

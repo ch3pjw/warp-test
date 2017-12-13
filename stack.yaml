@@ -39,7 +39,7 @@ packages:
   - '.'
   - location:
       git: https://github.com/jdreaver/eventful.git
-      commit: 374f603c6717b360231d4ff61eaeb895835d889d
+      commit: d66dc3556f08fd22f8a0ca4878743dd8e944224e
     subdirs:
      - eventful-core
      - eventful-memory

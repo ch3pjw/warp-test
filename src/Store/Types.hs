@@ -44,7 +44,8 @@ newStoreFrom writer reader = do
           writer [\uuid _event -> liftIO $ U.writeChan i $ Just $ UuidFor uuid]
 
 liftEventStoreWriter
-  :: (m (Maybe (EventWriteError pos)) -> n (Maybe (EventWriteError pos)))
+  :: (  m (Either (EventWriteError pos) EventVersion)
+     -> n (Either (EventWriteError pos) EventVersion))
   -> EventStoreWriter key pos m event
   -> EventStoreWriter key pos n event
 liftEventStoreWriter f (EventStoreWriter w) =

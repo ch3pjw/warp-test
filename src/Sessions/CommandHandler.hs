@@ -1,5 +1,6 @@
 module Sessions.CommandHandler where
 
+import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -16,7 +17,6 @@ import EventT
   , timeStamp)
 import Mailer (SenderAddress(..), SmtpSettings, trySendEmails)
 import Store (Store, sRunEventT)
-import Types (untilNothing)
 import UuidFor (UuidFor, coerceUuidFor)
 import qualified UuidFor as UuidFor
 
@@ -34,11 +34,13 @@ requestSessionCommand :: (MonadIO m) => EmailAddress -> EventT SessionEvent m ()
 requestSessionCommand e =
     -- Logging events can fail if the stream happens to exist (collision),
     -- so we retry:
-    untilNothing go
+    void $ untilRight go
   where
     go = do
       sUuid' <- UuidFor.newRandom
       logEvents' sUuid' NoStream [SessionRequestedSessionEvent e]
+    untilRight :: (Monad m) => m (Either a b) -> m b
+    untilRight m = m >>= either (const $ untilRight m) return
 
 bindSessionToAccountCommand
     :: (Monad m)

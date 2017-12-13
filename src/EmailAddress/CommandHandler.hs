@@ -28,8 +28,8 @@ bindEmailToAcct genUuid' e eaUuid' =
   wrapError <$> logEvents' (genUuid' e) NoStream
     [EmailBoundToAccountEmailAddressEvent e eaUuid']
   where
-    wrapError Nothing = Right ()
-    wrapError _ = Left "Stream already exists"
+    wrapError (Right _) = Right ()
+    wrapError (Left _) = Left "Stream already exists"
 
 removeEmail
   :: (Monad m)
