@@ -4,7 +4,6 @@
 module Sessions.Pages where
 
 import Prelude hiding (div)
-import Blaze.ByteString.Builder (toByteString)
 import Clay ((?), (-:))
 import qualified Clay as C
 import qualified Clay.Flexbox as Fb
@@ -24,7 +23,6 @@ import Text.BlazeT.Html5 as H
 import Text.BlazeT.Html5.Attributes hiding (id)
 import qualified Text.Email.Validate as Email
 import Web.ClientSession (Key)
-import qualified Web.Cookie as WC
 
 import Css (notificationCss, globalCss, phoneCss, largeCss, padding')
 import Events (EmailAddress, UserAgentString(..), SessionEvent, unTsUuidFor)
@@ -33,9 +31,10 @@ import Templates (StaticResources, page, s, id_, nbsp, mailto)
 import UuidFor (UuidFor(..))
 import WaiUtils (respondHtml, respondHtml', redir, notFound)
 
+import Sessions.CommandHandler (SignInStatus(..))
 import Sessions.Cookies
-  (SessionCookie(..), sessionSetCookie, maybeWithSessionCookie
-  , sendResponseWithCookie, expireCookie)
+  (SessionCookie(..), sessionSetCookie, sendResponseWithCookie, expireCookie)
+import Sessions.Middleware (maybeWithSessionCookie)
 
 
 homePageContent :: (MonadReader StaticResources m) => Bool -> HtmlT m ()
@@ -144,24 +143,25 @@ signInPost requestSession httpReq sendResponse = do
 signInResource
   :: (MonadIO m, MonadReader StaticResources m)
   => Key
-  -> (UuidFor SessionEvent -> UserAgentString -> IO (Maybe SessionCookie))
+  -> (UuidFor SessionEvent -> UserAgentString -> IO SignInStatus)
+  -> (UuidFor SessionEvent -> IO SessionCookie)
   -> Text -> Wai.ApplicationT m
-signInResource cookieEncryptionKey doSignIn uuidText req sendResponse =
+signInResource cookieEncryptionKey doSignIn waitCookie uuidText req sendResponse =
     -- FIXME: UuidFor labels the UUID as being for the correct type, regardless
     -- of whether this is true. Don't know if that's going to be an issue...
     go (UuidFor <$> UUID.fromText uuidText)
   where
     go Nothing = respondHtml' HTTP.status404 genericErrHtml req sendResponse
     go (Just sUuid') = do
-      mCookie <- liftIO $ doSignIn sUuid' uaString
-      mSetCookie <-
-          traverse (liftIO . sessionSetCookie cookieEncryptionKey) mCookie
-      case mSetCookie of
+      status <- liftIO $ doSignIn sUuid' uaString
+      case status of
+        SignInSuccess -> do
+          setCookie <- liftIO $ waitCookie sUuid' >>=
+              sessionSetCookie cookieEncryptionKey
+          redir "/" req $ sendResponseWithCookie setCookie sendResponse
         -- FIXME: not sure if we want this to be the same generic, and whether
         -- 404 is always the right code, and if that even matters...
-        Nothing -> respondHtml' HTTP.status404 genericErrHtml req sendResponse
-        Just sCookie ->
-          redir "/" req $ sendResponseWithCookie sCookie sendResponse
+        _ -> respondHtml' HTTP.status404 genericErrHtml req sendResponse
     uaString = UserAgentString $ decodeUtf8 $
         maybe "" id $ Wai.requestHeaderUserAgent req
 

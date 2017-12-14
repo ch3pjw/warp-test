@@ -11,6 +11,7 @@ import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Data.ByteString as BS
 import Data.DateTime (getCurrentTime)
 import Data.Monoid ((<>))
+import Data.Pool (Pool)
 import Data.Text (Text)
 import qualified Data.Text.Lazy as LazyText
 import Data.UUID (UUID)
@@ -24,11 +25,12 @@ import System.Envy (FromEnv, fromEnv, env, envMaybe, decodeEnv)
 import qualified Web.ClientSession as ClientSession
 
 import Events
-  (Command, AccountCommand, SessionCommand, decomposeCommand, SessionEvent)
+  (Command, AccountCommand, SessionCommand, decomposeCommand, SessionEvent
+  , tsUuidFor)
 import EventT (timeStamp)
 import Lib
 import Middleware (forceTls, prettifyError')
-import ReadView (runReadViews)
+import ReadView (setupForReadViews, viewWorker)
 import Registration
 import Router
 import Scheduler
@@ -42,14 +44,16 @@ import qualified UuidFor as UuidFor
 import WaiUtils (respondHtml, respondText)
 
 import Accounts.CommandHandler (mkAccountCommandHandler)
+-- import Accounts.ReadViews (newAccountReadView)
 
 import Sessions.CommandHandler
   ( newSessionUserActor, SessionUserActor(..), mkSessionCommandHandler
   , liftSessionEventT)
-import Sessions.Cookies (maybeWithSessionCookie)
+import Sessions.Middleware (maybeWithValidatedSessionCookie)
 import Sessions.Pages
   (homePageContent, signInPost, signInResource, signOutResource)
-import Sessions.ReadViews (activeSessionProcessManager)
+import Sessions.ReadViews
+  (newActiveSessionProcessManager, waitSessionCookie)
 
 
 data ServerConfig = ServerConfig
@@ -84,12 +88,16 @@ main = do
     pool <- runNoLoggingT (DB.createPostgresqlPool (DB.pgConnStr $ rcDatabaseConfig regConfig) 2)
     store <- newDBStore pool
     let sessionActor = newSessionUserActor getCurrentTime store
+    aspm <- newActiveSessionProcessManager pool
 
     let authMiddleware = buildAuth
           (scUsername serverConfig) (scPassword serverConfig)
-    let hp = homePage cookieEncryptionKey
+    let hp = homePage cookieEncryptionKey pool
     let sip = signInPost $ suaRequestSession sessionActor
-    let sig = signInResource cookieEncryptionKey $ suaSignIn sessionActor
+    let sig = signInResource
+          cookieEncryptionKey
+          (suaSignIn sessionActor)
+          (waitSessionCookie aspm . tsUuidFor)
     let sog = signOutResource cookieEncryptionKey $ suaSignOut sessionActor
     let ig = interestedCollectionGet pool
     let errHandler = prettifyError' $ templatedErrorTransform errorTemplate
@@ -113,13 +121,20 @@ main = do
           (stopScheduler scheduler)
           (mapM_ cmdHandler) :: Maybe [Scheduled Command] -> IO ()
 
-    withAsync (runReadViews [(schedCmds, activeSessionProcessManager)] pool getWait) $ \viewWorkerAsync -> do
-        link viewWorkerAsync
-        withAsync (runScheduler scheduler) $ \schedulerAsync -> do
-            link schedulerAsync
-            if (scAllowInsecure serverConfig)
-            then Warp.run (scPort serverConfig) app
-            else Warp.run (scPort serverConfig) $ forceTls app
+    -- acctRV <- newAccountReadView
+
+    aspmThread <- viewWorker aspm pool schedCmds <$> getWait
+    -- acctRvThread <- viewWorker acctRV pool (const $ return ()) <$> getWait
+
+    setupForReadViews pool
+    withAsync (
+      mapConcurrently_ id [aspmThread, runScheduler scheduler] -- plus acctRvThread
+      ) $ \bgThreadsAsync -> do
+          link bgThreadsAsync
+          if (scAllowInsecure serverConfig)
+          then Warp.run (scPort serverConfig) app
+          else Warp.run (scPort serverConfig) $ forceTls app
+
 
 scheduleCmds
   :: (AccountCommand -> IO ())
@@ -173,8 +188,8 @@ runReaderT' :: r -> ReaderT r m a -> m a
 runReaderT' = flip runReaderT
 
 
-homePage :: ClientSession.Key -> Appy
-homePage key = maybeWithSessionCookie key
+homePage :: ClientSession.Key -> Pool DB.SqlBackend -> Appy
+homePage key pool = maybeWithValidatedSessionCookie key pool
     (respondHtml $ homePageContent False) (respondText . LazyText.pack . show)
 
 root

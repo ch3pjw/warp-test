@@ -81,22 +81,23 @@ getState proj key = streamProjectionState <$> getStreamProjection proj key
 logWithLatest
     :: (Monad m)
     => Projection state event -> UUID -> (state -> ([event], a))
-    -> EventT event m a
+    -> EventT event m (EventVersion, a)
 logWithLatest proj uuid f = do
     streamProj <- getStreamProjection proj uuid
     let (events, result) = f $ streamProjectionState streamProj
     eError <- logEvents uuid
         (ExactPosition $ streamProjectionPosition streamProj)
         events
-    either retry (const $ return result) eError
+    either retry (\ev -> return (ev, result)) eError
   where
     retry _ = logWithLatest proj uuid f
 
 logWithLatest_
   :: (Monad m)
   => Projection state event -> UUID -> (state -> [event])
-  -> EventT event m ()
-logWithLatest_ proj uuid f = logWithLatest proj uuid $ flip (,) () . f
+  -> EventT event m EventVersion
+logWithLatest_ proj uuid f =
+    fmap fst $ logWithLatest proj uuid $ flip (,) () . f
 
 mapEvents
     :: (Monad m) => (event -> event') -> (event' -> Maybe event)
@@ -159,11 +160,11 @@ getState' proj uuid' = getState proj $ unUuidFor uuid'
 logWithLatest'
     :: (Monad m)
     => Projection state event -> UuidFor event -> (state -> ([event], a))
-    -> EventT event m a
+    -> EventT event m (EventVersion, a)
 logWithLatest' proj uuid' = logWithLatest proj $ unUuidFor uuid'
 
 logWithLatest_'
     :: (Monad m)
     => Projection state event -> UuidFor event -> (state -> [event])
-    -> EventT event m ()
+    -> EventT event m EventVersion
 logWithLatest_' proj uuid' = logWithLatest_ proj $ unUuidFor uuid'

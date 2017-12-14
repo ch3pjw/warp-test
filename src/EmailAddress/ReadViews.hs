@@ -9,6 +9,9 @@
 module EmailAddress.ReadViews where
 
 import Control.Monad (void)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Trans.Reader (ReaderT)
+import Data.Pool (Pool)
 import qualified  Database.Persist.Postgresql as DB
 import Database.Persist.TH (
     share, mkPersist, sqlSettings, mkMigrate, persistLowerCase)
@@ -32,7 +35,9 @@ AcctEmailPMEmailAcctAssoc
 |]
 
 
-someUpdateThing :: SimpleRvUpdate SessionEvent [Command]
+someUpdateThing
+  :: (MonadIO m)
+  => UuidFor SessionEvent -> SessionEvent -> ReaderT DB.SqlBackend m [Command]
 someUpdateThing sUuid' (SessionRequestedSessionEvent e) = do
     mAssoc <- DB.getBy $ UniqueAcctEmailPMEmailAcctAssocEmailAddr e
     case mAssoc of
@@ -43,7 +48,10 @@ someUpdateThing sUuid' (SessionRequestedSessionEvent e) = do
       Nothing -> undefined
 someUpdateThing _sUuid' _ = return []
 
-trackAssocs :: SimpleRvUpdate EmailAddressEvent [Command]
+trackAssocs
+  :: (MonadIO m)
+  => UuidFor EmailAddressEvent -> EmailAddressEvent
+  -> ReaderT DB.SqlBackend m [Command]
 trackAssocs eaUuid' (EmailBoundToAccountEmailAddressEvent e aUuid') = do
   -- FIXME: this should probably at least log if we stumble across an
   -- association that already exists, even though that _should_ never happen.
@@ -54,8 +62,9 @@ trackAssocs eaUuid' EmailRemovedEmailAddressEvent = do
   DB.deleteBy $ UniqueAcctEmailPMEmailAcctAssocEmailUuid $ coerceUuidFor eaUuid'
   return []
 
-accountEmailsProcessManager :: ProcessManager (TimeStamped Event) [Command]
-accountEmailsProcessManager =
+mkAccountEmailsProcessManager
+  :: Pool DB.SqlBackend -> ProcessManager (TimeStamped Event) [Command]
+mkAccountEmailsProcessManager pool =
     simpleProcessManager "account_emails_process_manager" migrateAEPM
     update poll
   where

@@ -11,10 +11,11 @@
 module ReadView
   ( DB.EntityField(..)
   , ViewSequenceNumberId
+  , IsView(..)
   , ReadView(..), RvUpdate
-  , readView, simpleReadView, SimpleRvUpdate
+  , readView, simpleReadView, SimpleRvUpdate, toRvUpdate
+  , setupForReadViews
   , viewWorker
-  , runReadViews
   , liftReadView
   , ProcessManager(..), simpleProcessManager
   ) where
@@ -55,11 +56,19 @@ ViewSequenceNumber
 -- FIXME: name!!!
 type RvUpdate event returnType
     = SequenceNumber -> UuidFor event -> EventVersion -> event
-    -> ReaderT DB.SqlBackend IO returnType -- FIXME: <- is a terrible name
+    -> IO returnType -- FIXME: <- is a terrible name
 
 type SimpleRvUpdate event returnType
-    = UuidFor event -> event -> ReaderT DB.SqlBackend IO returnType -- <- still bad
+    = UuidFor event -> event -> IO returnType -- <- still bad
 
+toRvUpdate :: SimpleRvUpdate event x -> RvUpdate event x
+toRvUpdate f _ uuid' _ e = f uuid' e
+
+
+class IsView a event x | a -> event, a -> x where
+  viewName :: a -> Text
+  viewMigration :: a -> DB.Migration
+  viewUpdate :: a -> RvUpdate event x
 data ReadView event = ReadView
   { rvTableName :: Text
   , rvMigration :: DB.Migration
@@ -68,6 +77,11 @@ data ReadView event = ReadView
 
 instance Show (ReadView event) where
     show rv = unpack $ "<ReadView " <> (rvTableName rv) <> ">"
+
+instance IsView (ReadView event) event () where
+  viewName = rvTableName
+  viewMigration = rvMigration
+  viewUpdate = rvUpdate
 
 readView :: Text -> DB.Migration -> RvUpdate event () -> ReadView event
 readView = ReadView
@@ -95,25 +109,16 @@ latestEvents latestHandled =
     jsonReader = sqlGlobalEventStoreReader eventStoreConfig
     eventReader = serializedGlobalEventStoreReader jsonStringSerializer jsonReader
 
-class IsView a event x | a -> event, a -> x where
-  viewName :: a -> Text
-  viewMigration :: a -> DB.Migration
-  viewUpdate :: a -> RvUpdate event x
-
-instance IsView (ReadView event) event () where
-  viewName = rvTableName
-  viewMigration = rvMigration
-  viewUpdate = rvUpdate
-
 handleReadViewEvents
   :: (IsView a event x, Monoid x)
   => a -> [GlobalStreamEvent event]
   -> ReaderT DB.SqlBackend IO x
 handleReadViewEvents v events = do
-    results <- mapM (applyUpdate . decomposeEvent) events
+    results <- liftIO $ mapM (applyUpdate . decomposeEvent) events
     updateSN events
     return $ mconcat results
   where
+    -- FIXME: decomposeEvent is already defined in Events.hs
     decomposeEvent e = let e' = streamEventEvent e in
         ( streamEventPosition e
         , UuidFor $ streamEventKey e'
@@ -164,22 +169,8 @@ viewWorker v pool notify wait = DB.runSqlPool i pool >> f >> notify Nothing
     updateAndNotify = updateReadView v >>= liftIO . notify . Just
 
 
--- FIXME: or process managers
-runReadViews
-  :: (ToJSON event, FromJSON event, IsView v event x, Monoid x)
-  => [(Maybe x -> IO (), v)]
-  -> Pool DB.SqlBackend -> IO (IO (Maybe a)) -> IO ()
-runReadViews notificationActionsAndRvs pool getWait = do
-    -- Taking the pairs of ReadView and corresponding notification channel feels
-    -- clunky - but the alternative, as we have in Store, where we construct a
-    -- queue internally in an IO action that returns the data structure doesn't
-    -- feel great either...
-    DB.runSqlPool (DB.runMigration migrateVSN) pool
-    as <- mapM (uncurry runViewWorker) notificationActionsAndRvs
-    mapM_ A.link as
-    mapM_ A.wait as
-  where
-    runViewWorker n rv = A.async $ getWait >>= viewWorker rv pool n
+setupForReadViews :: Pool DB.SqlBackend -> IO ()
+setupForReadViews = DB.runSqlPool (DB.runMigration migrateVSN)
 
 liftReadView :: (event' -> Maybe event) -> ReadView event -> ReadView event'
 liftReadView f rv = rv { rvUpdate = rvUpdate' }

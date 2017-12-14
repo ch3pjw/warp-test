@@ -7,7 +7,7 @@ import qualified Data.Text as Text
 import Data.Time.Clock (UTCTime)
 import qualified Network.Mail.Mime as Mime
 
-import Eventful (ExpectedPosition(..))
+import Eventful (ExpectedPosition(..), EventVersion)
 
 import Events
   ( EmailAddress, UserAgentString, SessionCommand(..), Event, SessionEvent(..)
@@ -79,19 +79,18 @@ expireSessionRequestCommand sUuid' = do
     logExpiry = logEvents_' sUuid' AnyPosition
         [SessionSignInWindowExpiredSessionEvent]
 
+data SignInStatus = SignInSuccess | NoPendingSessionFound | NoAcctUuidFound
+
 signInCommand
-    :: (Monad m) => (UuidFor SessionEvent) -> UserAgentString
-    -> EventT SessionEvent m (Maybe SessionCookie)
-signInCommand sUuid' uaString = logWithLatest' initialSessionProjection sUuid' f
+    :: (Monad m) => UuidFor SessionEvent -> UserAgentString
+    -> EventT SessionEvent m SignInStatus
+signInCommand sUuid' uaString =
+    snd <$> logWithLatest' initialSessionProjection sUuid' f
   where
-    f (SessionState _ Pending maUuid') =
-      case maUuid' of
-        Nothing -> nout
-        Just aUuid' ->
-          ( [SessionSignedInSessionEvent uaString]
-          , Just $ sessionCookie (coerceUuidFor sUuid') aUuid')
-    f _ = nout
-    nout = ([], Nothing)
+    f (SessionState _ Pending Nothing) = ([], NoAcctUuidFound)
+    f (SessionState _ Pending (Just aUuid')) =
+        ([SessionSignedInSessionEvent uaString] , SignInSuccess)
+    f _ = ([], NoPendingSessionFound)
 
 signOutCommand
     :: (Monad m) => (UuidFor SessionEvent) -> EventT SessionEvent m ()
@@ -140,7 +139,7 @@ data SessionUserActor
   = SessionUserActor
   { suaRequestSession :: EmailAddress -> IO ()
   , suaSignIn
-      :: UuidFor SessionEvent -> UserAgentString -> IO (Maybe SessionCookie)
+      :: UuidFor SessionEvent -> UserAgentString -> IO SignInStatus
   , suaSignOut :: UuidFor SessionEvent -> IO ()
   }
 

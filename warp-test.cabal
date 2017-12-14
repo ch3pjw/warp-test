@@ -40,6 +40,7 @@ library
                      , Sessions.CommandHandler
                      , Sessions.Cookies
                      , Sessions.Email
+                     , Sessions.Middleware
                      , Sessions.Model
                      , Sessions.Pages
                      , Sessions.ReadViews
@@ -113,6 +114,7 @@ executable warp-test-exe
                      , monad-logger
                      , mtl
                      , persistent-postgresql
+                     , resource-pool
                      , text
                      , unagi-chan
                      , utf8-string

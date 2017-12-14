@@ -57,25 +57,14 @@ sessionSetCookie key cookieData = do
     , WC.setCookieExpires = Just $ addUTCTime cookieLifeSpan t
    }
 
-retrieveSessionCookie :: Key -> Wai.Request -> Either String SessionCookie
-retrieveSessionCookie key req =
+extractSessionCookie :: Key -> Wai.Request -> Either String SessionCookie
+extractSessionCookie key req =
   note "No cookie headers" (lookup HTTP.hCookie $ Wai.requestHeaders req) >>=
   return . WC.parseCookies >>=
   -- FIXME: "sessionCookie" should be a global value
   note "Session cookie not present" . lookup "sessionCookie" >>=
   note "Failed to decrypt session cookie" . decrypt key >>=
   note "Failed to JSON decode session cookie" . decode . fromStrict
-
-maybeWithSessionCookie
-  :: (Monad m)
-  => Key -> Wai.ApplicationT m -> (SessionCookie -> Wai.ApplicationT m)
-  -> Wai.ApplicationT m
-maybeWithSessionCookie key defApp withScApp req sendResponse =
-    either
-      (const defApp)
-      withScApp
-      (retrieveSessionCookie key req)
-    req sendResponse
 
 acceptCookiePolicySetCookie :: WC.SetCookie
 acceptCookiePolicySetCookie = WC.def

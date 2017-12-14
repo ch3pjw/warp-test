@@ -4,7 +4,7 @@ module EmailAddress.CommandHandler where
 
 import Data.Time.Clock (UTCTime)
 
-import Eventful (ExpectedPosition(NoStream))
+import Eventful (ExpectedPosition(NoStream), EventVersion)
 
 import Events
   ( TimeStamped, EmailAddress, Event, EmailAddressEvent(..), AccountEvent
@@ -33,7 +33,7 @@ bindEmailToAcct genUuid' e eaUuid' =
 
 removeEmail
   :: (Monad m)
-  => UuidFor EmailAddressEvent -> EventT EmailAddressEvent m ()
+  => UuidFor EmailAddressEvent -> EventT EmailAddressEvent m EventVersion
 removeEmail eaUuid' =
     logWithLatest_' initialEmailAddressProjection eaUuid' $
       \s -> case easEmailAddress s of
@@ -45,7 +45,7 @@ data EmailAddressUserActor
   { eauaBindEmailToAcct
       :: EmailAddress -> UuidFor (TimeStamped AccountEvent)
       -> IO (Either String ())
-  , eauaRemoveEmail :: UuidFor EmailAddressEvent -> IO ()
+  , eauaRemoveEmail :: UuidFor EmailAddressEvent -> IO EventVersion
   }
 
 newEmailAddressUserActor

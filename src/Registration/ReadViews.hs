@@ -9,10 +9,11 @@
 module Registration.ReadViews
   ( DB.EntityField(..)
   , emailRegistrationEmailAddress
-  , emailStateReadView
+  , mkEmailStateReadView
   ) where
 
 import Control.Monad (void)
+import Data.Pool (Pool)
 import Data.UUID (UUID)
 import Database.Persist.Postgresql ((=.), (==.))
 import qualified Database.Persist.Postgresql as DB
@@ -42,8 +43,10 @@ EmailRegistration
 
 -- FIXME: table name needs to line up with what the template stuff above
 -- produces, and is _not_ checked :-/
-emailStateReadView :: ReadView (TimeStamped Event)
-emailStateReadView = simpleReadView  "email_registration" migrateER update
+mkEmailStateReadView :: Pool DB.SqlBackend -> ReadView (TimeStamped Event)
+mkEmailStateReadView pool =
+    simpleReadView  "email_registration" migrateER
+       (\uuid' event -> DB.runSqlPool (update uuid' event) pool)
   where
     update uuid' (_, EmailAddressSubmittedEvent email) = void $ DB.insertBy $
         EmailRegistration (unUuidFor uuid') email False

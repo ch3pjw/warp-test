@@ -5,10 +5,15 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Sessions.ReadViews where
 
+import qualified Control.Concurrent.Chan.Unagi as U
 import Control.Monad (void)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Trans.Reader (ReaderT)
+import Data.Pool (Pool)
 import Data.Time.Clock (UTCTime, NominalDiffTime, addUTCTime)
 import Data.Text (Text)
 import Database.Persist.Postgresql ((=.), (==.), (+=.))
@@ -21,11 +26,11 @@ import Eventful.Store.Postgresql () -- For UUID postgresification
 import Events
   ( EmailAddress, UserAgentString(..), Event, SessionEvent(..), AccountEvent
   , EmailAddressEvent(..), TimeStamped, decomposeEvent, Command(..))
-import ReadView
-  (SimpleRvUpdate, simpleProcessManager, ProcessManager(..))
+import ReadView (IsView(..), RvUpdate, toRvUpdate)
 import Scheduler (Scheduled, actNow, actAfter, actBefore, actBetween, mkTimeout)
 import UuidFor (UuidFor, coerceUuidFor)
 
+import Sessions.Cookies (SessionCookie(..), sessionCookie)
 import Sessions.Model (sessionActivationTimeout)
 
 
@@ -33,7 +38,6 @@ import Sessions.Model (sessionActivationTimeout)
 -- email
 emailSendTimeout :: NominalDiffTime
 emailSendTimeout = mkTimeout $ 60 * 60
-
 
 share [mkPersist sqlSettings, mkMigrate "migrateSPM"] [persistLowerCase|
 SessionPMActiveSession
@@ -62,7 +66,9 @@ SessionPMEmailAcctAssoc
 |]
 
 updateActiveSession
-  :: SimpleRvUpdate (TimeStamped SessionEvent) [Scheduled Command]
+  :: (MonadIO m)
+  => UuidFor (TimeStamped SessionEvent) -> TimeStamped SessionEvent
+  -> ReaderT DB.SqlBackend m [Scheduled Command]
 updateActiveSession sUuid' (t, SessionRequestedSessionEvent e) = do
     void $ DB.insertBy $ SessionPMPendingSession sUuid' e Nothing expiryTime 0
     maybeAssoc <- DB.getBy $ UniqueSessionPMEmailAcctAssocEmailAddr e
@@ -140,7 +146,10 @@ updateActiveSession uuid' (_t, SessionSignInWindowExpiredSessionEvent) = do
     return []
 
 updateAccountAssociation
-  :: SimpleRvUpdate (TimeStamped EmailAddressEvent) [Command]
+  :: (MonadIO m)
+  => UuidFor (TimeStamped EmailAddressEvent)
+  -> TimeStamped EmailAddressEvent
+  -> ReaderT DB.SqlBackend m [Command]
 updateAccountAssociation
   eUuid' (_t, EmailBoundToAccountEmailAddressEvent e aUuid') = do
     void $ DB.insertBy $ SessionPMEmailAcctAssoc e eUuid' aUuid'
@@ -155,17 +164,73 @@ updateAccountAssociation eUuid' (_t, EmailRemovedEmailAddressEvent) = do
     DB.deleteBy $ UniqueSessionPMEmailAcctAssocEmailUuid eUuid'
     return []
 
-activeSessionProcessManager :: ProcessManager (TimeStamped Event) (Scheduled Command)
-activeSessionProcessManager =
-    simpleProcessManager "session_process_manager" migrateSPM update poll
+data ActiveSessionProcessManager
+  = ActiveSessionProcessManager
+  { aspmUpdate :: RvUpdate (TimeStamped Event) [Scheduled Command]
+  , aspmWaitSessionActive
+      :: UuidFor (TimeStamped SessionEvent) -> IO SessionPMActiveSession
+  }
+
+instance IsView
+    ActiveSessionProcessManager (TimeStamped Event) [Scheduled Command]
   where
-    update uuid' event =
-        let t = fst event in
-        decomposeEvent
+    viewName _ = "session_process_manager"
+    viewMigration _ = migrateSPM
+    viewUpdate = aspmUpdate
+
+newActiveSessionProcessManager
+  :: Pool DB.SqlBackend -> IO ActiveSessionProcessManager
+newActiveSessionProcessManager pool = do
+    (i, _) <- U.newChan
+    return $ ActiveSessionProcessManager
+        (toRvUpdate $ update i)
+        (waitSessionActive $ U.dupChan i)
+  where
+    update i uuid' event =
+        let t = fst event in do
+        result <- flip DB.runSqlPool pool $ decomposeEvent
           noop
           (\ee -> fmap actNow <$> updateAccountAssociation (coerceUuidFor uuid') (t, ee))
           noop
           (\se -> updateActiveSession (coerceUuidFor uuid') (t, se))
           (snd event)
+        U.writeChan i (coerceUuidFor uuid')
+        return result
     noop = const $ return []
-    poll = undefined
+
+    waitSessionActive getChan sUuid' = do
+        -- NB: we must duplicate the chan before checking the DB, because
+        -- otherwise we could miss the event that says the session was signed
+        -- in:
+        o <- liftIO getChan
+        inner o
+      where
+        doWait o = do
+          uuid' <- liftIO $ U.readChan o
+          if uuid' == sUuid'
+            then inner o
+            else doWait o
+        inner o = do
+          DB.runSqlPool
+            (DB.getBy $ UniqueSessionPMActiveSessionUuid sUuid') pool >>=
+            maybe (doWait o) (return . DB.entityVal)
+
+activeSessionToCookie :: SessionPMActiveSession -> SessionCookie
+activeSessionToCookie as = sessionCookie
+  (sessionPMActiveSessionSessionUuid as)
+  (sessionPMActiveSessionAccountUuid as)
+
+waitSessionCookie
+  :: ActiveSessionProcessManager
+  -> UuidFor (TimeStamped SessionEvent)
+  -> IO SessionCookie
+waitSessionCookie aspm sUuid' = do
+  activeSession <- liftIO $ aspmWaitSessionActive aspm sUuid'
+  return $ activeSessionToCookie activeSession
+
+
+validateSessionCookie
+  :: (MonadIO m) => SessionCookie
+  -> ReaderT DB.SqlBackend m (Maybe SessionCookie)
+validateSessionCookie sc = fmap (const sc) <$> (DB.getBy $
+  UniqueSessionPMActiveSessionUuid $ scSessionUuid sc)
