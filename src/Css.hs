@@ -205,8 +205,8 @@ mainStyling = globalCss (do
 
     ".ul-ticks" ? li ? do
       -- FIXME: this is annoying as we can't change the color of the icon :-(
-      -- FIXME: it may be wise to take a copy of these and host ourselves :-)
-      backgroundImage $ url "https://feathericons.com/node_modules/feather-icons/dist/icons/check.svg"
+      -- FIXME: might want to inject the URL for this, rather than hard code?
+      backgroundImage $ url "https://s3.eu-west-2.amazonaws.com/concert.main.static/check.svg"
       backgroundRepeat noRepeat
       backgroundPosition $ positioned (px 0) (px 5)
       backgroundSize $ px 20 `by` px 20
