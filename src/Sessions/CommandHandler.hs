@@ -14,7 +14,7 @@ import Events
   , AccountEvent, TimeStamped, toEvent, decomposeEvent)
 import EventT
   ( EventT, logEvents', logEvents_', logWithLatest', getState', mapEvents
-  , timeStamp)
+  , timeStamp, logNewStream)
 import Mailer (SenderAddress(..), SmtpSettings, trySendEmails)
 import Store (Store, sRunEventT)
 import UuidFor (UuidFor, coerceUuidFor)
@@ -31,16 +31,7 @@ type LinkFormatter event = UuidFor event -> Text
 -- These functions correspond to all the session commands that can be issued:
 
 requestSessionCommand :: (MonadIO m) => EmailAddress -> EventT SessionEvent m ()
-requestSessionCommand e =
-    -- Logging events can fail if the stream happens to exist (collision),
-    -- so we retry:
-    void $ untilRight go
-  where
-    go = do
-      sUuid' <- UuidFor.newRandom
-      logEvents' sUuid' NoStream [SessionRequestedSessionEvent e]
-    untilRight :: (Monad m) => m (Either a b) -> m b
-    untilRight m = m >>= either (const $ untilRight m) return
+requestSessionCommand e = void $ logNewStream [SessionRequestedSessionEvent e]
 
 bindSessionToAccountCommand
     :: (Monad m)

@@ -3,11 +3,13 @@ module EventT
   , logEvents, logEvents_
   , getStreamProjection
   , getState
+  , logNewStream
   , logWithLatest, logWithLatest_
   , mapEvents, liftToEvent, timeStamp
   , logEvents', logEvents_'
   , getStreamProjection'
   , getState'
+  , logNewStream'
   , logWithLatest', logWithLatest_'
   )
   where
@@ -19,9 +21,10 @@ import Control.Monad.Trans.Reader (ReaderT(..), withReaderT, ask)
 import Data.Maybe (mapMaybe)
 import Data.Time.Clock (UTCTime)
 import Data.UUID (UUID)
+import qualified Data.UUID.V4 as UUIDv4
 
 import Eventful
-  ( ExpectedPosition(ExactPosition), EventStoreReader(..), EventWriteError
+  ( ExpectedPosition(..), EventStoreReader(..), EventWriteError
   , StreamEvent, StreamProjection(..), getLatestStreamProjection
   , versionedStreamProjection, EventVersion, Projection)
 
@@ -73,6 +76,15 @@ getState
     :: (Monad m)
     => Projection state event -> UUID -> EventT event m state
 getState proj key = streamProjectionState <$> getStreamProjection proj key
+
+logNewStream :: (MonadIO m) => [event] -> EventT event m UUID
+logNewStream events = untilRight go
+  where
+    go = do
+      uuid <- liftIO UUIDv4.nextRandom
+      fmap (const uuid) <$> logEvents uuid NoStream events
+    untilRight :: (Monad m) => m (Either a b) -> m b
+    untilRight m = m >>= either (const $ untilRight m) return
 
 -- | Use the given initial projection to project the latest state from the
 -- store, use the given (side-effect free) function to generate new events,
@@ -156,6 +168,9 @@ getState'
     :: (Monad m)
     => Projection state event -> UuidFor event -> EventT event m state
 getState' proj uuid' = getState proj $ unUuidFor uuid'
+
+logNewStream' :: (MonadIO m) => [event] -> EventT event m (UuidFor event)
+logNewStream' = fmap UuidFor . logNewStream
 
 logWithLatest'
     :: (Monad m)
