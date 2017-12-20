@@ -14,7 +14,6 @@ import Data.Time.Clock
   (NominalDiffTime, getCurrentTime, secondsToDiffTime, addUTCTime)
 import Data.DateTime (startOfTime)
 import qualified Network.Wai as Wai
-import qualified Network.Wai.Trans as Wai
 import qualified Network.HTTP.Types as HTTP
 import Web.ClientSession (Key, encryptIO, decrypt)
 import qualified Web.Cookie as WC

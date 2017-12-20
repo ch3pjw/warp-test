@@ -20,7 +20,6 @@ module ReadView
   , ProcessManager(..), simpleProcessManager
   ) where
 
-import qualified Control.Concurrent.Async as A
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader (ReaderT)
