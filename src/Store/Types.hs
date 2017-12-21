@@ -19,6 +19,7 @@ import UuidFor (UuidFor(..))
 
 data Store m event = Store
   { sGetWaitUpdate :: IO (IO (Maybe (UuidFor event)))
+  , sWaitFor :: UuidFor event -> (event -> Bool) -> IO (Maybe event)
   -- FIXME: sendShutdown feels weird, because it doesn't mean anything to
   -- actually writing to the store...
   , sSendShutdown :: IO ()
@@ -35,13 +36,28 @@ newStoreFrom writer reader = do
     -- scope:
     (i, _) <- U.newChan
     return $ Store
-        (U.readChan <$> U.dupChan i)
+        (getWaitUpdate i)
+        (waitFor i)
         (U.writeChan i Nothing)
         (_runEventT i)
   where
-    _runEventT i elt = do
-        runEventT elt reader $ storeAndPublishEvents
-          writer [\uuid _event -> liftIO $ U.writeChan i $ Just $ UuidFor uuid]
+    _runEventT i elt =
+        runEventT elt reader $ storeAndPublishEvents writer
+          [\uuid event -> liftIO $ U.writeChan i $ Just (UuidFor uuid, event)]
+    getWaitUpdate i = do
+      o <- U.dupChan i
+      return $ fmap fst <$> U.readChan o
+    waitFor i requestedUuid' p = U.dupChan i >>= loop
+      where
+        loop o = do
+          a <- U.readChan o
+          case a of
+            Just (uuid', event) ->
+              if uuid' == requestedUuid' && p event
+                then return (Just event)
+                else loop o
+            Nothing -> return Nothing
+
 
 liftEventStoreWriter
   :: (  m (Either (EventWriteError pos) EventVersion)
