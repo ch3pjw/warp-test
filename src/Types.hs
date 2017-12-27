@@ -36,3 +36,7 @@ untilJust m = m >>= maybe (untilJust m) return
 
 untilNothing :: (Monad m) => m (Maybe a) -> m ()
 untilNothing m = m >>= maybe (return ()) (const $ untilNothing m)
+
+toMonoid :: (Applicative f, Monoid (f a)) => Maybe a -> f a
+toMonoid Nothing = mempty
+toMonoid (Just a) = pure a
