@@ -40,14 +40,14 @@ emailSendTimeout :: NominalDiffTime
 emailSendTimeout = mkTimeout $ 60 * 60
 
 share [mkPersist sqlSettings, mkMigrate "migrateSPM"] [persistLowerCase|
-SessionPMActiveSession
+SessionPMActiveSession sql=session_pm_active_sessions
     sessionUuid (UuidFor (TimeStamped SessionEvent))
     accountUuid (UuidFor (TimeStamped AccountEvent))
     userAgent Text
     UniqueSessionPMActiveSessionUuid sessionUuid
     deriving Show
 
-SessionPMPendingSession
+SessionPMPendingSession sql=session_pm_pending_sessions
     sessionUuid (UuidFor (TimeStamped SessionEvent))
     emailAddress EmailAddress
     accountUuid (UuidFor (TimeStamped AccountEvent)) Maybe
@@ -56,12 +56,19 @@ SessionPMPendingSession
     UniqueSessionPMPendingSessionSessionUuid sessionUuid
     deriving Show
 
-SessionPMEmailAcctAssoc
+SessionPMEmailAcctAssoc sql=session_pm_email_account_assocs
     emailAddress EmailAddress
     emailUuid (UuidFor (TimeStamped EmailAddressEvent))
     accountUuid (UuidFor (TimeStamped AccountEvent))
     UniqueSessionPMEmailAcctAssocEmailAddr emailAddress
     UniqueSessionPMEmailAcctAssocEmailUuid emailUuid
+    deriving Show
+
+SessionPMPendingEmailAcctAssoc sql=session_pm_pending_email_account_assocs
+    emailAddress EmailAddress
+    emailUuid (UuidFor (TimeStamped EmailAddressEvent))
+    accountUuid (UuidFor (TimeStamped AccountEvent))
+    UniqueSessionPMPendingEmailAcctAssocEmailUuid emailUuid
     deriving Show
 |]
 
@@ -151,15 +158,43 @@ updateAccountAssociation
   -> TimeStamped EmailAddressEvent
   -> ReaderT DB.SqlBackend m [Command]
 updateAccountAssociation
-  eUuid' (_t, EmailBoundToAccountEmailAddressEvent e aUuid') = do
-    void $ DB.insertBy $ SessionPMEmailAcctAssoc e eUuid' aUuid'
-    sessionUuids <-
-        fmap (sessionPMPendingSessionSessionUuid . DB.entityVal) <$>
-        DB.selectList
-          [ SessionPMPendingSessionEmailAddress ==. e
-          , SessionPMPendingSessionAccountUuid ==. Nothing] []
-    return $
-        fmap (flip BindSessionToAccountCommand aUuid') sessionUuids
+  eUuid' (_t, EmailBindingToAccountRequestedEmailAddressEvent e aUuid') = do
+    -- This can fail if we've got a duplicate eUuid':
+    void $ DB.insertBy $ SessionPMPendingEmailAcctAssoc e eUuid' aUuid'
+    return []
+updateAccountAssociation
+  eUuid' (_t, EmailBindingRequestRejectedDuplicateEmailAddressEvent) = do
+    DB.deleteBy $ UniqueSessionPMPendingEmailAcctAssocEmailUuid eUuid'
+    return []
+updateAccountAssociation
+  eUuid' (_t, EmailBindingRequestAcceptedEmailAddressEvent) = do
+    -- Here we need to do two things:
+    --  a) Move the email account association over to the confirmed table
+    --  b) Deal with any sessions that need to be associated with the account
+    --     that we now know about.
+    confirmed <- fmap (fromPendingAssoc . DB.entityVal) <$>
+      DB.getBy (UniqueSessionPMPendingEmailAcctAssocEmailUuid eUuid')
+    events <- case confirmed of
+      -- FIXME: what to do if we can't find the pending assoc? *
+      Nothing -> return []
+      Just assoc@(SessionPMEmailAcctAssoc e _eUuid' aUuid') -> do
+        -- FIXME: what to do if we are trying to insert a duplicate assoc? *
+        -- NB: * both of those conditions "should never happen"
+        void $ DB.insertBy assoc
+        sessionUuids <-
+            fmap (sessionPMPendingSessionSessionUuid . DB.entityVal) <$>
+            DB.selectList
+                [ SessionPMPendingSessionEmailAddress ==. e
+                , SessionPMPendingSessionAccountUuid ==. Nothing] []
+        return $
+            fmap (flip BindSessionToAccountCommand aUuid') sessionUuids
+    DB.deleteBy $ UniqueSessionPMPendingEmailAcctAssocEmailUuid eUuid'
+    return events
+  where
+    fromPendingAssoc
+      :: SessionPMPendingEmailAcctAssoc -> SessionPMEmailAcctAssoc
+    fromPendingAssoc (SessionPMPendingEmailAcctAssoc e eUuid'' aUuid') =
+      SessionPMEmailAcctAssoc e eUuid'' aUuid'
 updateAccountAssociation eUuid' (_t, EmailRemovedEmailAddressEvent) = do
     DB.deleteBy $ UniqueSessionPMEmailAcctAssocEmailUuid eUuid'
     return []

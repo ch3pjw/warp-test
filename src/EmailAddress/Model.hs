@@ -11,22 +11,31 @@ import Events
   , AccountEvent)
 import UuidFor (UuidFor(..))
 
+data EmailAddressStage = Pending | Accepted | Rejected deriving (Eq, Show)
+
 data EmailAddressState
   = EmailAddressState
-  { easEmailAddress :: EmailAddress
+  { easStage :: EmailAddressStage
+  , easEmailAddress :: EmailAddress
   , easAccountUuid' :: UuidFor (TimeStamped AccountEvent)
   } deriving (Eq, Show)
 
 initialEmailAddressState :: EmailAddressState
-initialEmailAddressState = EmailAddressState "" (UuidFor UUID.nil)
+initialEmailAddressState = EmailAddressState Pending "" (UuidFor UUID.nil)
 
 isUnassociated :: EmailAddressState -> Bool
 isUnassociated = UUID.null . unUuidFor . easAccountUuid'
 
 updateEmailAddressState
   :: EmailAddressState -> EmailAddressEvent -> EmailAddressState
-updateEmailAddressState _ (EmailBoundToAccountEmailAddressEvent e aUuid') =
-  EmailAddressState e aUuid'
+updateEmailAddressState
+  _ (EmailBindingToAccountRequestedEmailAddressEvent e aUuid') =
+    initialEmailAddressState {easEmailAddress = e, easAccountUuid' = aUuid'}
+updateEmailAddressState
+  s EmailBindingRequestRejectedDuplicateEmailAddressEvent =
+    s {easStage = Rejected}
+updateEmailAddressState s EmailBindingRequestAcceptedEmailAddressEvent =
+    s {easStage = Accepted}
 updateEmailAddressState _ EmailRemovedEmailAddressEvent =
   initialEmailAddressState
 

@@ -8,8 +8,9 @@ import Eventful (ExpectedPosition(NoStream), EventVersion)
 
 import Events
   ( TimeStamped, EmailAddress, Event, EmailAddressEvent(..), AccountEvent
-  , toEvent)
-import EventT (EventT, logEvents', logWithLatest_', timeStamp, mapEvents)
+  , toEvent, tsUuidFor)
+import EventT
+  (EventT, logEvents', logWithLatest_', timeStamp, mapEvents, logNewStream')
 import Store (Store, sRunEventT)
 import UuidFor (UuidFor)
 
@@ -18,44 +19,41 @@ import EmailAddress.Model
   , eventToEmailAddressEvent)
 
 
-bindEmailToAcct
-  :: (Monad m)
-  => (EmailAddress -> UuidFor EmailAddressEvent)
-  -> EmailAddress -> UuidFor (TimeStamped AccountEvent)
-  -> EventT EmailAddressEvent m (Either String ())
-bindEmailToAcct genUuid' e eaUuid' =
-  -- FIXME: does this just need to take a UuidFor EmailAddressEvent?
-  wrapError <$> logEvents' (genUuid' e) NoStream
-    [EmailBoundToAccountEmailAddressEvent e eaUuid']
-  where
-    wrapError (Right _) = Right ()
-    wrapError (Left _) = Left "Stream already exists"
+-- bindEmailToAcct
+--   :: (Monad m)
+--   => EmailAddress -> UuidFor (TimeStamped AccountEvent)
+--   -> EventT EmailAddressEvent m (UuidFor (TimeStamped EmailAddressEvent))
+-- bindEmailToAcct e aUuid' =
+--   -- FIXME: kinda want to wait on the log receiving an accepted or rejected
+--   -- event before returning from this action...
+--   tsUuidFor <$>
+--     logNewStream' [BindEmailToAccountRequestedEmailAddressEvent e aUuid']
 
-removeEmail
-  :: (Monad m)
-  => UuidFor EmailAddressEvent -> EventT EmailAddressEvent m EventVersion
-removeEmail eaUuid' =
-    logWithLatest_' initialEmailAddressProjection eaUuid' $
-      \s -> case easEmailAddress s of
-        "" -> []
-        _ -> [EmailRemovedEmailAddressEvent]
+-- removeEmail
+--   :: (Monad m)
+--   => UuidFor EmailAddressEvent -> EventT EmailAddressEvent m EventVersion
+-- removeEmail eaUuid' =
+--     logWithLatest_' initialEmailAddressProjection eaUuid' $
+--       \s -> case easEmailAddress s of
+--         "" -> []
+--         _ -> [EmailRemovedEmailAddressEvent]
 
-data EmailAddressUserActor
-  = EmailAddressUserActor
-  { eauaBindEmailToAcct
-      :: EmailAddress -> UuidFor (TimeStamped AccountEvent)
-      -> IO (Either String ())
-  , eauaRemoveEmail :: UuidFor EmailAddressEvent -> IO EventVersion
-  }
+-- data EmailAddressUserActor
+--   = EmailAddressUserActor
+--   { eauaBindEmailToAcct
+--       :: EmailAddress -> UuidFor (TimeStamped AccountEvent)
+--       -> IO (Either String ())
+--   , eauaRemoveEmail :: UuidFor EmailAddressEvent -> IO EventVersion
+--   }
 
-newEmailAddressUserActor
-  :: IO UTCTime -> Store IO (TimeStamped Event)
-  -> (EmailAddress -> UuidFor EmailAddressEvent) -> EmailAddressUserActor
-newEmailAddressUserActor getT store genUuid' = EmailAddressUserActor
-    (\e -> go . bindEmailToAcct genUuid' e)
-    (go . removeEmail)
-  where
-    go = sRunEventT store . timeStamp getT . liftEmailAddressEventT
+-- newEmailAddressUserActor
+--   :: IO UTCTime -> Store IO (TimeStamped Event)
+--   -> (EmailAddress -> UuidFor EmailAddressEvent) -> EmailAddressUserActor
+-- newEmailAddressUserActor getT store genUuid' = EmailAddressUserActor
+--     (\e -> go . bindEmailToAcct genUuid' e)
+--     (go . removeEmail)
+--   where
+--     go = sRunEventT store . timeStamp getT . liftEmailAddressEventT
 
-liftEmailAddressEventT :: EventT EmailAddressEvent IO a -> EventT Event IO a
-liftEmailAddressEventT = mapEvents toEvent eventToEmailAddressEvent
+-- liftEmailAddressEventT :: EventT EmailAddressEvent IO a -> EventT Event IO a
+-- liftEmailAddressEventT = mapEvents toEvent eventToEmailAddressEvent

@@ -65,13 +65,17 @@ data EmailEvent
   deriving (Eq, Show)
 
 data EmailAddressEvent
-  = EmailBoundToAccountEmailAddressEvent
+  = EmailBindingToAccountRequestedEmailAddressEvent
       EmailAddress (UuidFor (TimeStamped AccountEvent))
+  | EmailBindingRequestRejectedDuplicateEmailAddressEvent
+  | EmailBindingRequestAcceptedEmailAddressEvent
   | EmailRemovedEmailAddressEvent
   deriving (Eq, Show)
 
 data AccountEvent
-  = AccountCreatedAccountEvent
+  = AccountCreationRequestedForEmailAccountEvent EmailAddress
+  | AccountCreationRejectedDuplicateAccountEvent
+  | AccountCreationAcceptedAccountEvent
   | AccountNameUpdatedAccountEvent Text
   | ServiceUpdateEmailsEnabledAccountEvent
   | ServiceUpdateEmailsDisabledAccountEvent
@@ -144,11 +148,19 @@ liftProjection f (Projection seed handler) = Projection seed handler'
 data EmailAddressCommand
   = BindEmailToAccountEmailAddressCommand
       EmailAddress (UuidFor (TimeStamped AccountEvent))
+  | RejectDuplicateEmailBindingRequestEmailAddressCommand
+      (UuidFor (TimeStamped EmailAddressEvent))
+  | AcceptEmailBindingRequestEmailAddressCommand
+      (UuidFor (TimeStamped EmailAddressEvent))
   | RemoveEmailEmailAddressCommand (UuidFor (TimeStamped EmailAddressEvent))
   deriving (Eq, Show)
 
 data AccountCommand
   = EnsureAccountExistsForEmailAddrAccountCommand EmailAddress
+  | RejectAccountCreationRequestAccountCommand
+      (UuidFor (TimeStamped AccountEvent))
+  | AcceptAccountCreationRequestAccountCommand
+      (UuidFor (TimeStamped AccountEvent))
   | UpdateAccountNameAccountCommand (UuidFor (TimeStamped AccountEvent)) Text
   | EnableServiceUpdateEmailsAccountCommand
   | DisableServiceUpdateEmailsAccountCommand
