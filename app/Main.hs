@@ -134,6 +134,7 @@ root icp ir ig authMiddleware =
   childEps
     [ ("david", getEp $ githubRedir "foolswood")
     , ("paul", getEp $ githubRedir "ch3pjw")
+    , ("grahame", getEp $ githubRedir "grahamegee")
     , ("about", getEp $ htmlResponse aboutUs)
     , ("company", getEp $ htmlResponse companyInfo)
     , ("screen.css", getEp $ screenCss)
