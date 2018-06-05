@@ -3,7 +3,9 @@
 import System.IO
 import Data.Aeson
 import qualified Data.ByteString as BS
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromJust)
+import Data.Monoid
+import Data.String (IsString)
 import GHC.Generics
 import Data.Text
 import Control.Monad
@@ -17,6 +19,7 @@ import System.Process
 import System.Timeout
 import System.Exit (exitFailure)
 import System.Environment (lookupEnv)
+import Test.Hspec
 
 import Utils (retry, postgresUp, withDockerD)
 
@@ -105,10 +108,22 @@ main = do
             r <- timeout 5000000 $ retry $ get "http://127.0.0.1:8080/interested" debugHandler
             when (r == Nothing) exitFailure
 
-            signUp
-            -- FIXME: this just hangs if we successfully sign up but
-            -- never get sent an email
-            e <- readChan emailChan
-            print (decodeStrict e :: Maybe ConcertMail)
-
+            hspec $ do
+              describe "signUp" $ do
+                it "Sends a confirmation email on user sign up" $
+                  let
+                    useraddr :: IsString s => s
+                    useraddr = "test@example.com"
+                  in do
+                  signUp useraddr
+                  -- FIXME: this just hangs if we successfully sign up but
+                  -- never get sent an email
+                  e <- readChan emailChan
+                  let confirmMail = fromJust $ decodeStrict @ConcertMail e
+                  (mailTo confirmMail) `shouldBe` "<" <> useraddr <> ">"
+            -- TODO:
+            --   -check other fields
+            --   -follow the link in the mail body to verify
+            --     -check the DB
+            --     -check the email response
     return ()
