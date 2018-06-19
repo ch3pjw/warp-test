@@ -63,6 +63,8 @@ makeWarpEnv = do
       , ("SMTP_USERNAME", "x")
       , ("SMTP_PASSWORD", "x")
       , ("SMTP_LOGGING", "yes")
+      , ("SMTP_PORT", "8025")
+      , ("SMTP_DISABLE_SSL_VALIDATION", "yes")-- FIXME: should test with ssl validation
 
       , ("MAILER_SENDER_ADDRESS", "integration_test@concertdaw.co.uk")
       , ("MAILER_SENDER_NAME", "Concert Integration Test")
