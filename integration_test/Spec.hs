@@ -117,9 +117,7 @@ main = do
                     useraddr :: IsString s => s
                     useraddr = "test@example.com"
                   in do
-                  signUp useraddr
-                  -- FIXME: this just hangs if we successfully sign up but
-                  -- never get sent an email
+                  timeout 5000000 $ signUp useraddr
                   e <- readChan emailChan
                   let confirmMail = fromJust $ decodeStrict @ConcertMail e
                   (mailTo confirmMail) `shouldBe` "<" <> useraddr <> ">"
