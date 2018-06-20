@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -45,17 +46,28 @@ data SmtpSettings = SmtpSettings
   , ssSettings :: SMTP.Settings
   } deriving (Show)
 
--- FIXME: we could extend this not to assume a port or using TLS (c.f STARTTLS)
+instance FromEnv SMTP.Settings where
+    fromEnv =
+         updateSettings
+            (\s l -> s {SMTP.sslLogToConsole = l})
+            (fmap unEnvToggle <$> envMaybe "SMTP_LOGGING")
+            SMTP.defaultSettingsSMTPSSL
+         >>= updateSettings
+            (\s p -> s {SMTP.sslPort = fromInteger p})
+            (envMaybe "SMTP_PORT")
+         >>= updateSettings
+            (\s v -> s {SMTP.sslDisableCertificateValidation = v})
+            (fmap unEnvToggle <$> envMaybe "SMTP_DISABLE_SSL_VALIDATION")
+      where
+        updateSettings f p sets = maybe sets (f sets) <$> p
+
+-- FIXME: we could extend this not to assume using TLS (c.f STARTTLS)
 instance FromEnv SmtpSettings where
     fromEnv = SmtpSettings
         <$> env "SMTP_SERVER"
         <*> env "SMTP_USERNAME"
         <*> env "SMTP_PASSWORD"
-        <*> (envMaybe "SMTP_LOGGING" >>= return . maybe
-             (mkSmtpSettings False) (mkSmtpSettings . unEnvToggle))
-      where
-        mkSmtpSettings logging = SMTP.defaultSettingsSMTPSSL
-          { SMTP.sslLogToConsole = logging }
+        <*> fromEnv
 
 newtype SenderAddress = SenderAddress
   { unSenderAddress :: Mime.Address

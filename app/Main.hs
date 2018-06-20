@@ -203,8 +203,9 @@ root hp sip sig sog ig authMiddleware =
   childEps
     [ ("david", getEp $ githubRedir "foolswood")
     , ("paul", getEp $ githubRedir "ch3pjw")
-    , ("about", getEp $ respondHtml aboutUs)
-    , ("company", getEp $ respondHtml companyInfo)
+    , ("grahame", getEp $ githubRedir "grahamegee")
+    , ("about", getEp $ htmlResponse aboutUs)
+    , ("company", getEp $ htmlResponse companyInfo)
     , ("screen.css", getEp $ screenCss)
     , ("api", authMiddleware <$> childEps
         [ ("interested", getEp ig)
